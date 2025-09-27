@@ -1,5 +1,4 @@
-discord==2.3.2
-discord.py==2.4.0
+discord.py==2.6.3
 websockets==14.1
 Quart==0.20.0
 cryptography==43.0.1
