@@ -81,7 +81,8 @@ class AttackListener:
         for atk_data in data["M"]:
             try:
                 unpacked = cls._unpack_atk_data(atk_data, players)
-                deserialized_atks.append(unpacked)
+                if unpacked is not None:
+                    deserialized_atks.append(unpacked)
             except:
                 continue
 
@@ -92,7 +93,11 @@ class AttackListener:
         cls,
         atk_data: dict[str, Any],
         players: dict[str, Any],
-    ) -> UnpackedAttackDataType:
+    ) -> UnpackedAttackDataType | None:
+        if not ("GS" in atk_data or "GA" in atk_data):
+            # Not an attack threat
+            return
+
         atk_id: int = atk_data["M"]["MID"]
         remaining_time: int = atk_data["M"]["TT"] - atk_data["M"]["PT"]
 
