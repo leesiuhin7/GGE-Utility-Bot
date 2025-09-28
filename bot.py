@@ -125,7 +125,15 @@ class BotManager:
             parent=config_group,
         )
 
+        config_dump = app_commands.Command(
+            name="dump",
+            description="Display active bot configurations",
+            callback=self._dump_config,
+            parent=config_group,
+        )
+
         config_group.add_command(config_reload)
+        config_group.add_command(config_dump)
 
         self._bot.tree.add_command(config_group)
 
@@ -209,6 +217,46 @@ class BotManager:
             await interaction.followup.send(
                 MESSAGES["config"]["reload"]["failed"],
             )
+
+    async def _dump_config(
+        self,
+        interaction: discord.Interaction,
+    ) -> None:
+        await interaction.response.defer()
+
+        channel_id = interaction.channel_id
+        if channel_id is None:
+            await interaction.followup.send(
+                MESSAGES["config"]["dump"]["not_channel"],
+            )
+            return
+
+        for guild_info in self.GUILD_INFOS:
+            if guild_info["config_channel"] == channel_id:
+                break
+        else:
+            await interaction.followup.send(
+                MESSAGES["config"]["dump"]["not_registered"],
+            )
+            return
+
+        guild_id = guild_info["guild_id"]
+        guild_config = self._guild_configs.get(str(guild_id))
+        # Defaulting to empty dict
+        if guild_config is None:
+            config_dict = {}
+        else:
+            config_dict: dict[Any, Any] = guild_config.get([])
+
+        # Serialize config for display
+        buffer = utils.serialize_as_display_buffer(config_dict)
+        file = discord.File(buffer, filename="config.json")
+
+        # Send config as json file
+        await interaction.followup.send(
+            MESSAGES["config"]["dump"]["succeeded"],
+            file=file,
+        )
 
     async def _load_config(
         self,

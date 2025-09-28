@@ -1,4 +1,5 @@
 import json
+import io
 from typing import TypedDict, Literal, Any, overload, Sequence
 
 
@@ -44,6 +45,24 @@ def parse_config_input(
         return parsed
     else:
         return
+
+
+def serialize_as_display_buffer(obj: Any) -> io.BytesIO:
+    """
+    Serializes an object into its json counterpart for display,
+    uses a empty dictionary if the object is not serializable.
+
+    :return: A BytesIO buffer of the serialized object
+    :rtype: io.BytesIO
+    """
+    json_bytes = json.dumps(
+        obj,
+        indent=2,
+        sort_keys=True,
+        default=lambda _: {},
+    ).encode("utf-8")
+    buffer = io.BytesIO(json_bytes)
+    return buffer
 
 
 class PathDict:

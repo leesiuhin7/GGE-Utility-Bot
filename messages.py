@@ -11,6 +11,14 @@ class ConfigType(TypedDict):
         ],
         str,
     ]
+    dump: dict[
+        Literal[
+            "not_channel",
+            "not_registered",
+            "succeeded",
+        ],
+        str,
+    ]
 
 
 class MessageType(TypedDict):
@@ -24,6 +32,11 @@ MESSAGES: MessageType = {
             "not_registered": "This channel has not been registered for configuration.",
             "failed": "Reload configuration failed.",
             "succeeded": "Reload configuration succeeded.",
+        },
+        "dump": {
+            "not_channel": "This channel cannot be used to reload configuration.",
+            "not_registered": "This channel has not been registered for configuration.",
+            "succeeded": "Configuration dump succeeded.",
         }
     }
 }
