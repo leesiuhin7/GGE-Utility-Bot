@@ -22,6 +22,7 @@ def init() -> None:
         cfg["attack_listener"]["request_cooldown"]
     )
     AttackListener.PLAYER_CONFIGS = cfg["players"]
+    StatusMonitor.PLAYER_CONFIGS = cfg["players"]
     BotManager.GUILD_INFOS = cfg["discord"]["guilds"]
 
 
