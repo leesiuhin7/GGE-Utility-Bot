@@ -222,12 +222,13 @@ class BotManager:
         self,
         interaction: discord.Interaction,
     ) -> None:
-        await interaction.response.defer()
+        await interaction.response.defer(ephemeral=True)
 
         channel_id = interaction.channel_id
         if channel_id is None:
             await interaction.followup.send(
                 MESSAGES["config"]["dump"]["not_channel"],
+                ephemeral=True,
             )
             return
 
@@ -237,6 +238,7 @@ class BotManager:
         else:
             await interaction.followup.send(
                 MESSAGES["config"]["dump"]["not_registered"],
+                ephemeral=True,
             )
             return
 
@@ -256,6 +258,7 @@ class BotManager:
         await interaction.followup.send(
             MESSAGES["config"]["dump"]["succeeded"],
             file=file,
+            ephemeral=True,
         )
 
     async def _load_config(
