@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Any, TypedDict
+from typing import Any, TypedDict, Literal
 
 import utils
 
@@ -20,6 +20,20 @@ class UnpackedAttackDataType(TypedDict):
     attacker_name: str
     attacker_player_name: str
     est_count: int
+
+
+class PuppetStatusType(TypedDict):
+    username: str
+    server: str
+    connected: bool | None
+    attack_warnings: bool
+
+
+class PuppetStatusOutputType(TypedDict):
+    username: str
+    server: str
+    active: Literal["enabled", "disabled", "unknown"]
+    attack_warnings: Literal["enabled", "disabled"]
 
 
 class AttackListener:
@@ -129,3 +143,35 @@ class AttackListener:
             "attacker_player_name": attacker_player_name,
             "est_count": est_count,
         }
+
+
+class StatusMonitor:
+    @classmethod
+    def encode(
+        cls,
+        status: PuppetStatusType
+    ) -> PuppetStatusOutputType:
+        username = status["username"]
+        server = status["server"]
+        connected = status["connected"]
+        attack_warnings = status["attack_warnings"]
+
+        if connected is True:
+            active_status = "enabled"
+        elif connected is False:
+            active_status = "disabled"
+        else:
+            active_status = "unknown"
+
+        if attack_warnings:
+            attack_warning_active = "enabled"
+        else:
+            attack_warning_active = "disabled"
+
+        output_obj: PuppetStatusOutputType = {
+            "username": username,
+            "server": server,
+            "active": active_status,
+            "attack_warnings": attack_warning_active,
+        }
+        return output_obj

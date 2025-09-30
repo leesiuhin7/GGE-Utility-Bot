@@ -76,6 +76,7 @@ class BotManager:
 
         self._guild_configs: dict[str, PathDict] = {}
         self._atk_listener = AttackListener(server_comm)
+        self._status_monitor = StatusMonitor(server_comm)
 
         self._send_queue: asyncio.Queue[tuple[str, int]] = (
             asyncio.Queue()
@@ -135,7 +136,22 @@ class BotManager:
         config_group.add_command(config_reload)
         config_group.add_command(config_dump)
 
+        puppet_group = app_commands.Group(
+            name="puppet",
+            description="Manage puppets",
+        )
+
+        puppet_status = app_commands.Command(
+            name="status",
+            description="Get current status of puppets",
+            callback=self._get_puppet_status,
+            parent=puppet_group,
+        )
+
+        puppet_group.add_command(puppet_status)
+
         self._bot.tree.add_command(config_group)
+        self._bot.tree.add_command(puppet_group)
 
     async def _start_bot_tasks(self) -> None:
         """
@@ -210,7 +226,7 @@ class BotManager:
         success = await self._load_config(guild_id, channel_id)
         if success:
             await interaction.followup.send(
-                MESSAGES["config"]["reload"]["succeeded"],
+                MESSAGES["config"]["reload"]["success"],
             )
             return
         else:
@@ -256,7 +272,35 @@ class BotManager:
 
         # Send config as json file
         await interaction.followup.send(
-            MESSAGES["config"]["dump"]["succeeded"],
+            MESSAGES["config"]["dump"]["success"],
+            file=file,
+            ephemeral=True,
+        )
+
+    async def _get_puppet_status(
+        self,
+        interaction: discord.Interaction,
+    ) -> None:
+        await interaction.response.defer(ephemeral=True)
+        guild_id = interaction.guild_id
+
+        status_list = await self._status_monitor.get_status()
+        encoded_status_list = [  # Check if status should be visible
+            dp.StatusMonitor.encode(out_status)
+            for out_status, _ in filter(
+                lambda status: guild_id in status[1],
+                status_list,
+            )
+        ]
+
+        # Searialize as display
+        buffer = utils.serialize_as_display_buffer(
+            encoded_status_list,
+        )
+        file = discord.File(buffer, filename="status.json")
+
+        await interaction.followup.send(
+            MESSAGES["puppet"]["status"]["success"],
             file=file,
             ephemeral=True,
         )
@@ -616,3 +660,84 @@ class AttackListener:
             "server": server,
             "routes": routes,
         }
+
+
+class StatusMonitor:
+    PLAYER_CONFIGS: list[PlayerConfigType]
+
+    def __init__(self, server_comm: ServerComm) -> None:
+        self._server_comm = server_comm
+
+    async def get_status(
+        self,
+    ) -> list[tuple[dp.PuppetStatusType, list[int]]]:
+        coros = [
+            asyncio.create_task(self._get_status(player_config))
+            for player_config in self.PLAYER_CONFIGS
+        ]
+        status_list = await asyncio.gather(*coros)
+        return status_list
+
+    async def _get_status(
+        self,
+        player_config: PlayerConfigType,
+    ) -> tuple[dp.PuppetStatusType, list[int]]:
+        username = player_config["info"]["username"]
+        password = player_config["info"]["password"]
+        server = player_config["info"]["server"]
+        attack_warnings = (
+            player_config["services"]["attack_listener"]["enabled"]
+        )
+        routes = player_config["visibility"]
+
+        connected = await self._get_active_status(
+            username=username,
+            password=password,
+            server=server,
+            timeout=15,
+        )
+
+        status: dp.PuppetStatusType = {
+            "username": username,
+            "server": server,
+            "connected": connected,
+            "attack_warnings": attack_warnings,
+        }
+        return status, routes
+
+    async def _get_active_status(
+        self,
+        *,
+        username: str,
+        password: str,
+        server: str,
+        timeout: float,
+    ) -> bool | None:
+        request_task = asyncio.create_task(
+            self._server_comm.send_request(
+                username=username,
+                password=password,
+                server=server,
+                command="info",
+                args={
+                    "name": "connected",
+                },
+            ),
+        )
+        _, pending = await asyncio.wait(
+            [request_task], timeout=timeout,
+        )
+        if request_task in pending:
+            return None
+
+        response = await request_task
+        if "error" in response:
+            return None
+
+        active = response["response"]
+        if active is True:
+            return True
+        elif active is False:
+            return False
+        else:
+            return None

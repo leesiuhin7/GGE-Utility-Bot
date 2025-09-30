@@ -7,7 +7,7 @@ class ConfigType(TypedDict):
             "not_channel",
             "not_registered",
             "failed",
-            "succeeded",
+            "success",
         ],
         str,
     ]
@@ -15,14 +15,19 @@ class ConfigType(TypedDict):
         Literal[
             "not_channel",
             "not_registered",
-            "succeeded",
+            "success",
         ],
         str,
     ]
 
 
+class PuppetType(TypedDict):
+    status: dict[Literal["success"], str]
+
+
 class MessageType(TypedDict):
     config: ConfigType
+    puppet: PuppetType
 
 
 MESSAGES: MessageType = {
@@ -31,12 +36,17 @@ MESSAGES: MessageType = {
             "not_channel": "This channel cannot be used to reload configuration.",
             "not_registered": "This channel has not been registered for configuration.",
             "failed": "Reload configuration failed.",
-            "succeeded": "Reload configuration succeeded.",
+            "success": "Reload configuration succeeded.",
         },
         "dump": {
             "not_channel": "This channel cannot be used to reload configuration.",
             "not_registered": "This channel has not been registered for configuration.",
-            "succeeded": "Configuration dump succeeded.",
+            "success": "Configuration dump succeeded.",
+        }
+    },
+    "puppet": {
+        "status": {
+            "success": "Puppet status loaded successfully.",
         }
     }
 }
