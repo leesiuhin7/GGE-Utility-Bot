@@ -15,7 +15,6 @@ class PlayerInfoConfigType(TypedDict):
 
 class AttackListenerServiceConfigType(TypedDict):
     enabled: bool
-    guild_routes: list[int]
 
 
 class StormSearcherServiceConfigType(TypedDict):
@@ -30,6 +29,7 @@ class ServiceConfigType(TypedDict):
 class PlayerConfigType(TypedDict):
     info: PlayerInfoConfigType
     services: ServiceConfigType
+    visibility: list[int]  # Guild ids
 
 
 class AttackListenerConfigType(TypedDict):
@@ -47,7 +47,7 @@ class LoggingConfigType(TypedDict):
 
 class GuildInfoConfigType(TypedDict):
     guild_id: int
-    config_channel: int
+    config_channel: int  # Channel id
 
 
 class DiscordConfigType(TypedDict):

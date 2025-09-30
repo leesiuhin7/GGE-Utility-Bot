@@ -353,7 +353,7 @@ class BotManager:
     async def _dispatch_atk_warning(
         self,
         routing_info: RoutingInfo,
-        atk_warnings: list[dp.UnpackedAttackDataType],
+        atk_warnings: list[str],
     ) -> None:
         routes = self._get_atk_listener_routes(routing_info)
         # Check if channels belong to their respective guilds
@@ -365,13 +365,8 @@ class BotManager:
                 if guild_id == route_guild_id:
                     valid_channel_ids.add(channel_id)
 
-        # Create messages from atk_warnings
-        msgs = [
-            dp.AttackListener.serialize(atk_warning)
-            for atk_warning in atk_warnings
-        ]
         # Send all messages to each valid channels
-        for msg in msgs:
+        for msg in atk_warnings:
             for channel_id in valid_channel_ids:
                 await self.send_msg(msg, channel_id)
 
@@ -496,16 +491,13 @@ class AttackListener:
         self._server_comm = server_comm
 
         self._output_queue: asyncio.Queue[tuple[
-            RoutingInfo, list[dp.UnpackedAttackDataType],
+            RoutingInfo, list[str],
         ]] = asyncio.Queue()
         self._prev_atk_ids: set[int] = set()
 
         self._started = False
 
-    async def get(self) -> tuple[
-        RoutingInfo,
-        list[dp.UnpackedAttackDataType],
-    ]:
+    async def get(self) -> tuple[RoutingInfo, list[str]]:
         return await self._output_queue.get()
 
     async def start(self) -> None:
@@ -517,7 +509,7 @@ class AttackListener:
                     ["services"]
                     ["attack_listener"]
                 )
-                routes = atk_listener_config["guild_routes"]
+                routes = player_config["visibility"]
                 if not atk_listener_config["enabled"]:
                     continue
 
@@ -563,7 +555,7 @@ class AttackListener:
                 continue
 
             msg_list, index = response["response"]
-            all_deserialized: list[dp.UnpackedAttackDataType] = []
+            atk_msgs: list[str] = []
             for msg in msg_list:
                 deserialized = dp.AttackListener.deserialize(msg)
                 if deserialized is None:
@@ -573,17 +565,17 @@ class AttackListener:
                     # Prevent duplicates
                     if atk_data["atk_id"] not in self._prev_atk_ids:
                         self._prev_atk_ids.add(atk_data["atk_id"])
-                        all_deserialized.append(atk_data)
+                        atk_msgs.append(
+                            dp.AttackListener.serialize(atk_data),
+                        )
 
-            if len(all_deserialized) > 0:
+            if len(atk_msgs) > 0:
                 routing_info = self._serialize_routing_info(
                     username=username,
                     server=server,
                     routes=routes,
                 )
-                await self._output_queue.put(
-                    (routing_info, all_deserialized),
-                )
+                await self._output_queue.put((routing_info, atk_msgs))
 
     async def _get_current_index(
         self,
