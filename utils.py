@@ -47,7 +47,10 @@ def parse_config_input(
         return
 
 
-def serialize_as_display_buffer(obj: Any) -> io.BytesIO:
+def serialize_as_display_buffer(
+    obj: Any,
+    sort_keys: bool,
+) -> io.BytesIO:
     """
     Serializes an object into its json counterpart for display,
     uses a empty dictionary if the object is not serializable.
@@ -58,7 +61,7 @@ def serialize_as_display_buffer(obj: Any) -> io.BytesIO:
     json_bytes = json.dumps(
         obj,
         indent=2,
-        sort_keys=True,
+        sort_keys=sort_keys,
         default=lambda _: {},
     ).encode("utf-8")
     buffer = io.BytesIO(json_bytes)

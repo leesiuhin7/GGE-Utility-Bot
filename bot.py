@@ -268,7 +268,9 @@ class BotManager:
             config_dict: dict[Any, Any] = guild_config.get([])
 
         # Serialize config for display
-        buffer = utils.serialize_as_display_buffer(config_dict)
+        buffer = utils.serialize_as_display_buffer(
+            config_dict, sort_keys=True,
+        )
         file = discord.File(buffer, filename="config.json")
 
         # Send config as json file
@@ -296,7 +298,7 @@ class BotManager:
 
         # Searialize as display
         buffer = utils.serialize_as_display_buffer(
-            encoded_status_list,
+            encoded_status_list, sort_keys=False,
         )
         file = discord.File(buffer, filename="status.json")
 

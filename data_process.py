@@ -32,7 +32,7 @@ class PuppetStatusType(TypedDict):
 class PuppetStatusOutputType(TypedDict):
     username: str
     server: str
-    active: Literal["enabled", "disabled", "unknown"]
+    status: Literal["enabled", "disabled", "unknown"]
     attack_warnings: Literal["enabled", "disabled"]
 
 
@@ -171,7 +171,7 @@ class StatusMonitor:
         output_obj: PuppetStatusOutputType = {
             "username": username,
             "server": server,
-            "active": active_status,
+            "status": active_status,
             "attack_warnings": attack_warning_active,
         }
         return output_obj
