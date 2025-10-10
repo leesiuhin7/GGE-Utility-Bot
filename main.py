@@ -50,6 +50,7 @@ async def main() -> None:
     bot_init()
 
     # Logging config
+    logging.basicConfig()
     logging_configs = config.cfg["logging"]["level_configs"]
     for logging_config in logging_configs:
         logging.getLogger(
