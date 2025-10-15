@@ -131,7 +131,8 @@ class ServerComm:
             "login",
         ],
         args: dict,
-    ) -> ResponseContentType:
+        timeout: float | None = None,
+    ) -> ResponseContentType | None:
         timestamp = time.time()
         msg_id = self._get_msg_id()
 
@@ -144,7 +145,7 @@ class ServerComm:
             timestamp=timestamp,
             msg_id=msg_id,
         )
-        return await self._send_request(request)
+        return await self._send_request(request, timeout)
 
     async def _connect_loop(self) -> None:
         while True:
@@ -208,17 +209,26 @@ class ServerComm:
     async def _send_request(
         self,
         request: Request,
-    ) -> ResponseContentType:
+        timeout: float | None,
+    ) -> ResponseContentType | None:
         request_msg = request.message
         msg_id = request.msg_id
         key = str(msg_id)
 
         # Initialize response queue
-        response_queue = asyncio.Queue()
+        response_queue: asyncio.Queue[ResponseContentType] = (
+            asyncio.Queue()
+        )
         self._response_register[key] = response_queue
 
         await self._request_queue.put((msg_id, request_msg))
         # Wait for response
-        response_msg = await self._response_register[key].get()
-        del self._response_register[key]
-        return response_msg
+        try:
+            return await asyncio.wait_for(
+                response_queue.get(),
+                timeout=timeout,
+            )
+        except TimeoutError:
+            return None
+        finally:
+            del self._response_register[key]

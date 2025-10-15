@@ -34,6 +34,7 @@ class PlayerConfigType(TypedDict):
 
 class AttackListenerConfigType(TypedDict):
     request_cooldown: float
+    request_timeout: float
 
 
 class LoggingLevelConfigType(TypedDict):

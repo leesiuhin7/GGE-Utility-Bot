@@ -21,6 +21,9 @@ def init() -> None:
     AttackListener.REQUEST_COOLDOWN = (
         cfg["attack_listener"]["request_cooldown"]
     )
+    AttackListener.REQUEST_TIMEOUT = (
+        cfg["attack_listener"]["request_timeout"]
+    )
     AttackListener.PLAYER_CONFIGS = cfg["players"]
     StatusMonitor.PLAYER_CONFIGS = cfg["players"]
     BotManager.GUILD_INFOS = cfg["discord"]["guilds"]
@@ -532,6 +535,7 @@ class BotManager:
 
 class AttackListener:
     REQUEST_COOLDOWN: float
+    REQUEST_TIMEOUT: float
     PLAYER_CONFIGS: list[PlayerConfigType]
 
     def __init__(self, server_comm: ServerComm) -> None:
@@ -597,7 +601,10 @@ class AttackListener:
                     "start_index": index,
                     "msg_type": "gam",
                 },
+                timeout=self.REQUEST_TIMEOUT,
             )
+            if response is None:
+                continue
             if "error" in response:
                 continue
 
@@ -640,9 +647,12 @@ class AttackListener:
                 "start_index": 0,
                 "msg_type": "",
             },
+            timeout=self.REQUEST_TIMEOUT,
         )
 
-        if "error" in response:
+        if response is None:
+            return
+        elif "error" in response:
             error = response["error"]
             logger.error(
                 f"Failed to fetch current index, error: {error}",
@@ -697,7 +707,7 @@ class StatusMonitor:
             username=username,
             password=password,
             server=server,
-            timeout=15,
+            timeout=30,
         )
 
         status: dp.PuppetStatusType = {
@@ -716,24 +726,18 @@ class StatusMonitor:
         server: str,
         timeout: float,
     ) -> bool | None:
-        request_task = asyncio.create_task(
-            self._server_comm.send_request(
-                username=username,
-                password=password,
-                server=server,
-                command="info",
-                args={
-                    "name": "connected",
-                },
-            ),
+        response = await self._server_comm.send_request(
+            username=username,
+            password=password,
+            server=server,
+            command="info",
+            args={
+                "name": "connected",
+            },
+            timeout=timeout,
         )
-        _, pending = await asyncio.wait(
-            [request_task], timeout=timeout,
-        )
-        if request_task in pending:
+        if response is None:
             return None
-
-        response = await request_task
         if "error" in response:
             return None
 
