@@ -11,6 +11,7 @@ logger = logging.getLogger(__name__)
 class UnpackedAttackDataType(TypedDict):
     atk_id: int
     remaining_time: int
+    kid: int
     target_x: int
     target_y: int
     target_name: str
@@ -40,6 +41,7 @@ class AttackListener:
     @classmethod
     def serialize(cls, deserialized: UnpackedAttackDataType) -> str:
         remaining_time = deserialized["remaining_time"]
+        kid = deserialized["kid"]
         target_x = deserialized["target_x"]
         target_y = deserialized["target_y"]
         target_name = deserialized["target_name"]
@@ -52,6 +54,7 @@ class AttackListener:
 
         # Convert seconds into time string
         compound_time = utils.as_compound_time(remaining_time)
+        kingdom_name = utils.kid_to_name(kid)
 
         components = [
             f"Incoming attack in approx. {compound_time}",
@@ -62,6 +65,8 @@ class AttackListener:
         ]
         if est_count != -1:
             components.append(f"with approx. {est_count} troop(s)")
+        if kingdom_name is not None:
+            components.append(f"in {kingdom_name}")
 
         return " ".join(components)
 
@@ -114,6 +119,7 @@ class AttackListener:
 
         atk_id: int = atk_data["M"]["MID"]
         remaining_time: int = atk_data["M"]["TT"] - atk_data["M"]["PT"]
+        kid: int = atk_data["M"]["KID"]
 
         target_id: int = atk_data["M"]["TID"]
         attacker_id: int = atk_data["M"]["OID"]
@@ -133,6 +139,7 @@ class AttackListener:
         return {
             "atk_id": atk_id,
             "remaining_time": remaining_time,
+            "kid": kid,
             "target_x": target_x,
             "target_y": target_y,
             "target_name": target_name,

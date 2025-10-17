@@ -177,3 +177,14 @@ def as_compound_time(seconds: int) -> str:
         return f"{m}m {s}s"
     else:
         return f"{s}s"
+
+
+def kid_to_name(kid: int) -> str | None:
+    name_map = {
+        0: "The Great Empire",
+        1: "The Burning Sands",
+        2: "The Everwinter Glacier",
+        3: "The Fire Peaks",
+        4: "The Storm Islands",
+    }
+    return name_map.get(kid)
