@@ -8,11 +8,15 @@ from discord.ext import commands
 
 import config
 from bot import BotManager
+from bot_services import (
+    AttackListener, StatusMonitor, ConfigManager,
+)
 from server_comm import ServerComm
 
 from auth import init as auth_init
 from server_comm import init as server_comm_init
 from bot import init as bot_init
+from bot_services import init as bot_services_init
 
 
 app = quart.Quart(__name__)
@@ -48,6 +52,7 @@ async def main() -> None:
     auth_init(CONTROL_PRIVATE_KEY)
     server_comm_init()
     bot_init()
+    bot_services_init()
 
     # Logging config
     logging.basicConfig()
@@ -76,7 +81,16 @@ async def main() -> None:
     )
 
     server_comm = ServerComm()
-    bot_manager = BotManager(bot=bot, server_comm=server_comm)
+    attack_listener = AttackListener(server_comm)
+    status_monitor = StatusMonitor(server_comm)
+    config_manager = ConfigManager()
+
+    bot_manager = BotManager(
+        bot=bot,
+        attack_listener=attack_listener,
+        status_monitor=status_monitor,
+        config_manager=config_manager,
+    )
 
     await server_comm.start()
 

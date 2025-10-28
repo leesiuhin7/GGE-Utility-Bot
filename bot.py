@@ -5,10 +5,15 @@ import asyncio
 import logging
 from typing import Any, TypedDict, Union
 
-from server_comm import ServerComm
-from config import PlayerConfigType, GuildInfoConfigType
+from config import GuildInfoConfigType
 import utils
-from utils import ParsedConfigInput, PathDict
+from utils import ParsedConfigInput
+from bot_services import (
+    AttackListener,
+    RoutingInfo,
+    StatusMonitor,
+    ConfigManager,
+)
 import data_process as dp
 from messages import MESSAGES
 
@@ -18,14 +23,6 @@ logger = logging.getLogger(__name__)
 
 def init() -> None:
     from config import cfg
-    AttackListener.REQUEST_COOLDOWN = (
-        cfg["attack_listener"]["request_cooldown"]
-    )
-    AttackListener.REQUEST_TIMEOUT = (
-        cfg["attack_listener"]["request_timeout"]
-    )
-    AttackListener.PLAYER_CONFIGS = cfg["players"]
-    StatusMonitor.PLAYER_CONFIGS = cfg["players"]
     BotManager.GUILD_INFOS = cfg["discord"]["guilds"]
 
 
@@ -53,12 +50,6 @@ class GuildConfigType(TypedDict):
     services: GuildServiceConfigType
 
 
-class RoutingInfo(TypedDict):
-    username: str
-    server: str
-    routes: list[int]
-
-
 class RouteChannels(TypedDict):
     guild_id: int
     channel_ids: list[int]
@@ -71,16 +62,19 @@ class BotManager:
         self,
         *,
         bot: commands.Bot,
-        server_comm: ServerComm,
+        attack_listener: AttackListener,
+        status_monitor: StatusMonitor,
+        config_manager: ConfigManager,
     ) -> None:
         self._bot = bot
         self._bot.add_listener(self._on_ready, "on_ready")
         self._bot.add_listener(self._on_message, "on_message")
         self._load_bot_commands()
 
-        self._guild_configs: dict[str, PathDict] = {}
-        self._atk_listener = AttackListener(server_comm)
-        self._status_monitor = StatusMonitor(server_comm)
+        # self._guild_configs: dict[str, PathDict] = {}
+        self._atk_listener = attack_listener
+        self._status_monitor = status_monitor
+        self._config_manager = config_manager
 
         self._send_queue: asyncio.Queue[tuple[str, int]] = (
             asyncio.Queue()
@@ -115,7 +109,7 @@ class BotManager:
         if parsed is None:
             return
 
-        self._update_config(guild_id, parsed)
+        self._config_manager.update(guild_id, parsed)
 
     def _load_bot_commands(self) -> None:
         config_group = app_commands.Group(
@@ -263,12 +257,12 @@ class BotManager:
             return
 
         guild_id = guild_info["guild_id"]
-        guild_config = self._guild_configs.get(str(guild_id))
-        # Defaulting to empty dict
-        if guild_config is None:
-            config_dict = {}
-        else:
-            config_dict: dict[Any, Any] = guild_config.get([])
+        try:
+            config_dict: dict[Any, Any] = (
+                self._config_manager.get(guild_id, [])
+            )
+        except ConfigManager.GuildNotFoundError:
+            config_dict = {}  # Defaulting to empty dict
 
         # Serialize config for display
         buffer = utils.serialize_as_display_buffer(
@@ -327,7 +321,7 @@ class BotManager:
             return False
 
         # Load and parse config messages
-        parsed_msgs: list[ParsedConfigInput] = []
+        parsed_msgs: list[ParsedConfigInput] = []  # Latest to oldest
         prev_msg = None
         end = False
         while not end:
@@ -354,40 +348,14 @@ class BotManager:
                     end = True
                     break
 
-        # Clear loaded config
-        self._update_config(
-            guild_id,
-            {"action": "delete", "path": [], "value": None},
-        )
         # Update config
-        for parsed in reversed(parsed_msgs):
-            self._update_config(guild_id, parsed)
+        self._config_manager.load(
+            guild_id,
+            # Reversing so that it starts with the oldest
+            list(reversed(parsed_msgs)),
+        )
 
         return True
-
-    def _update_config(
-        self,
-        guild_id: int,
-        parsed_input: ParsedConfigInput,
-    ) -> bool:
-        key = str(guild_id)
-        if parsed_input["action"] == "set":
-            if key not in self._guild_configs:
-                self._guild_configs[key] = PathDict()
-
-            return self._guild_configs[key].update(
-                path=parsed_input["path"],
-                action="set",
-                value=parsed_input["value"],
-            )
-        else:
-            if key not in self._guild_configs:
-                return False
-
-            return self._guild_configs[key].update(
-                path=parsed_input["path"],
-                action="delete",
-            )
 
     async def _send_msg(self, msg: str, channel_id: int) -> None:
         channel = self._bot.get_channel(channel_id)
@@ -429,19 +397,22 @@ class BotManager:
         for guild_id in routing_info["routes"]:
             try:
                 # Get configs, skip guild if config is malformed
-                key = str(guild_id)
-                guild_config = self._guild_configs[key]
-
-                enabled: bool = guild_config.get(
+                enabled: bool = self._config_manager.get(
+                    guild_id,
                     ["services", "attack_listener", "enabled"],
                 )
                 routes: dict[
                     str,
                     GuildAttackListenerRoutingConfigType,
-                ] = guild_config.get(
+                ] = self._config_manager.get(
+                    guild_id,
                     ["services", "attack_listener", "routes"]
                 )
-            except (KeyError, TypeError):
+            except (
+                ConfigManager.GuildNotFoundError,
+                KeyError,
+                TypeError,
+            ):
                 continue
 
             if not enabled:
@@ -531,220 +502,3 @@ class BotManager:
             return
 
         return channel.guild.id
-
-
-class AttackListener:
-    REQUEST_COOLDOWN: float
-    REQUEST_TIMEOUT: float
-    PLAYER_CONFIGS: list[PlayerConfigType]
-
-    def __init__(self, server_comm: ServerComm) -> None:
-        self._server_comm = server_comm
-
-        self._output_queue: asyncio.Queue[tuple[
-            RoutingInfo, list[str],
-        ]] = asyncio.Queue()
-        self._prev_atk_ids: set[int] = set()
-
-        self._started = False
-
-    async def get(self) -> tuple[RoutingInfo, list[str]]:
-        return await self._output_queue.get()
-
-    async def start(self) -> None:
-        if not self._started:
-            for player_config in self.PLAYER_CONFIGS:
-                player_info = player_config["info"]
-                atk_listener_config = (
-                    player_config
-                    ["services"]
-                    ["attack_listener"]
-                )
-                routes = player_config["visibility"]
-                if not atk_listener_config["enabled"]:
-                    continue
-
-                asyncio.create_task(self._listener(
-                    username=player_info["username"],
-                    password=player_info["password"],
-                    server=player_info["server"],
-                    routes=routes,
-                ))
-
-            self._started = True
-
-    async def _listener(
-        self,
-        *,
-        username: str,
-        password: str,
-        server: str,
-        routes: list[int],
-    ) -> None:
-        index = None
-        while index is None:
-            index = await self._get_current_index(
-                username=username,
-                password=password,
-                server=server,
-            )
-            await asyncio.sleep(self.REQUEST_COOLDOWN)
-
-        while True:
-            await asyncio.sleep(self.REQUEST_COOLDOWN)
-            response = await self._server_comm.send_request(
-                username=username,
-                password=password,
-                server=server,
-                command="search",
-                args={
-                    "start_index": index,
-                    "msg_type": "gam",
-                },
-                timeout=self.REQUEST_TIMEOUT,
-            )
-            if response is None:
-                continue
-            if "error" in response:
-                continue
-
-            msg_list, index = response["response"]
-            atk_msgs: list[str] = []
-            for msg in msg_list:
-                deserialized = dp.AttackListener.deserialize(msg)
-                if deserialized is None:
-                    continue
-
-                for atk_data in deserialized:
-                    # Prevent duplicates
-                    if atk_data["atk_id"] not in self._prev_atk_ids:
-                        self._prev_atk_ids.add(atk_data["atk_id"])
-                        atk_msgs.append(
-                            dp.AttackListener.serialize(atk_data),
-                        )
-
-            if len(atk_msgs) > 0:
-                routing_info = self._serialize_routing_info(
-                    username=username,
-                    server=server,
-                    routes=routes,
-                )
-                await self._output_queue.put((routing_info, atk_msgs))
-
-    async def _get_current_index(
-        self,
-        *,
-        username: str,
-        password: str,
-        server: str,
-    ) -> int | None:
-        response = await self._server_comm.send_request(
-            username=username,
-            password=password,
-            server=server,
-            command="search",
-            args={
-                "start_index": 0,
-                "msg_type": "",
-            },
-            timeout=self.REQUEST_TIMEOUT,
-        )
-
-        if response is None:
-            return
-        elif "error" in response:
-            error = response["error"]
-            logger.error(
-                f"Failed to fetch current index, error: {error}",
-            )
-            return
-        else:
-            return response["response"][1]
-
-    def _serialize_routing_info(
-        self,
-        *,
-        username: str,
-        server: str,
-        routes: list[int],
-    ) -> RoutingInfo:
-        return {
-            "username": username,
-            "server": server,
-            "routes": routes,
-        }
-
-
-class StatusMonitor:
-    PLAYER_CONFIGS: list[PlayerConfigType]
-
-    def __init__(self, server_comm: ServerComm) -> None:
-        self._server_comm = server_comm
-
-    async def get_status(
-        self,
-    ) -> list[tuple[dp.PuppetStatusType, list[int]]]:
-        coros = [
-            asyncio.create_task(self._get_status(player_config))
-            for player_config in self.PLAYER_CONFIGS
-        ]
-        status_list = await asyncio.gather(*coros)
-        return status_list
-
-    async def _get_status(
-        self,
-        player_config: PlayerConfigType,
-    ) -> tuple[dp.PuppetStatusType, list[int]]:
-        username = player_config["info"]["username"]
-        password = player_config["info"]["password"]
-        server = player_config["info"]["server"]
-        attack_warnings = (
-            player_config["services"]["attack_listener"]["enabled"]
-        )
-        routes = player_config["visibility"]
-
-        connected = await self._get_active_status(
-            username=username,
-            password=password,
-            server=server,
-            timeout=30,
-        )
-
-        status: dp.PuppetStatusType = {
-            "username": username,
-            "server": server,
-            "connected": connected,
-            "attack_warnings": attack_warnings,
-        }
-        return status, routes
-
-    async def _get_active_status(
-        self,
-        *,
-        username: str,
-        password: str,
-        server: str,
-        timeout: float,
-    ) -> bool | None:
-        response = await self._server_comm.send_request(
-            username=username,
-            password=password,
-            server=server,
-            command="info",
-            args={
-                "name": "connected",
-            },
-            timeout=timeout,
-        )
-        if response is None:
-            return None
-        if "error" in response:
-            return None
-
-        active = response["response"]
-        if active is True:
-            return True
-        elif active is False:
-            return False
-        else:
-            return None
