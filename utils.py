@@ -122,6 +122,9 @@ class PathDict:
             # Creating branches along the way if needed
             current_obj = current_obj.setdefault(key, {})
 
+        if not isinstance(current_obj, dict):
+            return False
+
         if len(path) > 0:
             key = path[-1]
             if action == "set":
