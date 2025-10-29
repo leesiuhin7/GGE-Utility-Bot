@@ -25,9 +25,14 @@ class PuppetType(TypedDict):
     status: dict[Literal["success"], str]
 
 
+class BattleReportType(TypedDict):
+    summary: str
+
+
 class MessageType(TypedDict):
     config: ConfigType
     puppet: PuppetType
+    battle_report: BattleReportType
 
 
 MESSAGES: MessageType = {
@@ -48,5 +53,8 @@ MESSAGES: MessageType = {
         "status": {
             "success": "Puppet status loaded successfully.",
         }
-    }
+    },
+    "battle_report": {
+        "summary": "Battle report summary.",
+    },
 }

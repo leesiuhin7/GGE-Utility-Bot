@@ -2,3 +2,5 @@ discord.py==2.6.3
 websockets==14.1
 Quart==0.20.0
 cryptography==43.0.1
+pillow==12.0.0
+numpy==2.3.4

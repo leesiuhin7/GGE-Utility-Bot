@@ -3,7 +3,8 @@ from discord.ext import commands
 from discord import app_commands
 import asyncio
 import logging
-from typing import Any, TypedDict, Union
+import io
+from typing import Any, TypedDict, Union, Literal
 
 from config import GuildInfoConfigType
 import utils
@@ -11,6 +12,7 @@ from utils import ParsedConfigInput
 from bot_services import (
     AttackListener,
     RoutingInfo,
+    summarize_battle_report,
     StatusMonitor,
     ConfigManager,
 )
@@ -55,6 +57,9 @@ class RouteChannels(TypedDict):
     channel_ids: list[int]
 
 
+MsgResponseType = set[Literal["config", "battle_report"]]
+
+
 class BotManager:
     GUILD_INFOS: list[GuildInfoConfigType]
 
@@ -71,7 +76,6 @@ class BotManager:
         self._bot.add_listener(self._on_message, "on_message")
         self._load_bot_commands()
 
-        # self._guild_configs: dict[str, PathDict] = {}
         self._atk_listener = attack_listener
         self._status_monitor = status_monitor
         self._config_manager = config_manager
@@ -97,19 +101,13 @@ class BotManager:
         logger.info(f"{self._bot.user} is online!")
 
     async def _on_message(self, message: discord.Message) -> None:
-        channel_id = message.channel.id
-        for guild_info in self.GUILD_INFOS:
-            if guild_info["config_channel"] == channel_id:
-                break
-        else:  # Exits if it doesn't match to any config channels
-            return
+        msg_response_type = self._get_msg_response_type(message)
 
-        guild_id = guild_info["guild_id"]
-        parsed = utils.parse_config_input(message.content)
-        if parsed is None:
-            return
-
-        self._config_manager.update(guild_id, parsed)
+        # "Dispatching" the message to different callbacks
+        if "config" in msg_response_type:
+            self._on_config_msg(message)
+        if "battle_report" in msg_response_type:
+            await self._on_battle_report_msg(message)
 
     def _load_bot_commands(self) -> None:
         config_group = app_commands.Group(
@@ -196,6 +194,107 @@ class BotManager:
             )
             await self._dispatch_atk_warning(
                 routing_info, atk_warnings,
+            )
+
+    def _get_msg_response_type(
+        self,
+        message: discord.Message,
+    ) -> MsgResponseType:
+        msg_response_type: MsgResponseType = set()
+
+        # Prevents reacting to message from itself
+        if message.author == self._bot.user:
+            return msg_response_type
+
+        channel_id = message.channel.id
+        guild_id = message.guild.id if message.guild else None
+
+        # Config
+        for guild_info in self.GUILD_INFOS:
+            if guild_info["config_channel"] == channel_id:
+                msg_response_type.add("config")
+                break
+
+        # Battle report
+        try:
+            is_battle_report = True
+
+            # Check if message is from a battle report channel
+            channel_ids: dict[str, int] = self._config_manager.get(
+                guild_id,
+                ["services", "battle_report", "channel_ids"],
+            ) if guild_id else {}
+
+            if channel_id not in channel_ids.values():
+                is_battle_report = False
+
+            # Check if there are image attachments
+            for attachment in message.attachments:
+                if attachment.content_type is None:
+                    continue
+                if attachment.content_type.startswith("image"):
+                    break
+            else:
+                is_battle_report = False
+
+            if is_battle_report:
+                msg_response_type.add("battle_report")
+        except:
+            pass
+
+        return msg_response_type
+
+    def _on_config_msg(self, message: discord.Message) -> None:
+        channel_id = message.channel.id
+        for guild_info in self.GUILD_INFOS:
+            if guild_info["config_channel"] == channel_id:
+                break
+        else:
+            return
+
+        guild_id = guild_info["guild_id"]
+        parsed = utils.parse_config_input(message.content)
+        if parsed is not None:
+            self._config_manager.update(guild_id, parsed)
+
+    async def _on_battle_report_msg(
+        self,
+        message: discord.Message,
+    ) -> None:
+        if message.guild is None:
+            return
+        guild_id = message.guild.id
+
+        try:
+            summary_enabled = self._config_manager.get(
+                guild_id,
+                ["services", "battle_report", "summary", "enabled"],
+            )
+        except:
+            return
+
+        if summary_enabled is not True:
+            return
+
+        for attachment in message.attachments:
+            if attachment.content_type is None:
+                continue
+            if not attachment.content_type.startswith("image"):
+                continue
+
+            # Save image file to buffer
+            buffer = io.BytesIO()
+            await attachment.save(buffer, seek_begin=True)
+
+            # Summarize battle report image
+            out_buffer = summarize_battle_report(buffer)
+            if out_buffer is None:
+                continue
+
+            await message.reply(
+                content=MESSAGES["battle_report"]["summary"],
+                file=discord.File(out_buffer, filename="summary.png"),
+                mention_author=False,
             )
 
     async def _reload_config(
