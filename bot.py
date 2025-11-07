@@ -4,7 +4,7 @@ from discord import app_commands
 import asyncio
 import logging
 import io
-from typing import Any, TypedDict, Union, Literal
+from typing_extensions import Any, TypedDict, Union, Literal
 
 from config import GuildInfoConfigType
 import utils

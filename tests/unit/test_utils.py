@@ -1,6 +1,6 @@
 import pytest
 import copy
-from typing import Sequence, Any, Type
+from typing_extensions import Sequence, Any, Type, TypedDict
 
 import utils
 
@@ -182,3 +182,67 @@ def test_path_dict_update_delete(
 ])
 def test_as_compound_time(seconds: int, expected: str) -> None:
     assert utils.as_compound_time(seconds) == expected
+
+
+class Inner(TypedDict):
+    x: int
+    y: float
+
+
+class NestedDict(TypedDict):
+    a: str
+    b: list[int]
+    nested: Inner
+
+
+@pytest.mark.parametrize("obj, obj_type, expected", [
+    (1, int, True),
+    (["a", "b", "cd"], list[str], True),
+    ("", str, True),
+    (
+        {
+            "a": "hello",
+            "b": [0, 1, 2],
+            "nested": {
+                "x": 10,
+                "y": 0.1,
+            }
+        },
+        NestedDict,
+        True,
+    ),
+    ("not int", int, False),
+    ([1, "2", 3], list[int], False),
+    (("x", "y", "z"), list[str], False),
+    (
+        {
+            "a": "hello",
+            "b": [0, 1, "2"],
+            "nested": {
+                "x": 10,
+                "y": 0.1,
+            }
+        },
+        NestedDict,
+        False,
+    ),
+    (
+        {
+            "a": "hello",
+            "b": [0, 1, 2],
+            "nested": {
+                "x": 10,
+                "y": 0.1,
+            },
+            "extra": "not allowed",
+        },
+        NestedDict,
+        False,
+    ),
+])
+def test_validate_type(
+    obj: Any,
+    obj_type: Type,
+    expected: bool,
+) -> None:
+    assert utils.validate_type(obj, obj_type) == expected

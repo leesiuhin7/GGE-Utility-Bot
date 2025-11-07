@@ -1,10 +1,11 @@
 import asyncio
 import logging
-from typing import TypedDict
+from typing_extensions import TypedDict
 
 from server_comm import ServerComm
 from config import PlayerConfigType
 import data_process as dp
+from utils import validate_type
 
 
 logger = logging.getLogger(__name__)
@@ -90,8 +91,19 @@ class AttackListener:
                 continue
             if "error" in response:
                 continue
+            try:
+                # Enforce types
+                if not validate_type(
+                    tuple(response["response"]),
+                    tuple[list[str], int],
+                ):
+                    continue
+            except:
+                continue
 
+            msg_list: list[str]
             msg_list, index = response["response"]
+
             atk_msgs: list[str] = []
             for msg in msg_list:
                 deserialized = dp.AttackListener.deserialize(msg)
@@ -141,8 +153,13 @@ class AttackListener:
                 f"Failed to fetch current index, error: {error}",
             )
             return
-        else:
-            return response["response"][1]
+
+        try:
+            index = response["response"][1]
+            if isinstance(index, int):
+                return index
+        except:
+            return
 
     def _serialize_routing_info(
         self,
