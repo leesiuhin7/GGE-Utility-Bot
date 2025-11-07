@@ -1,7 +1,7 @@
 from PIL import Image
 import numpy as np
 import io
-from typing import TypedDict, Sequence
+from typing_extensions import TypedDict, Sequence
 
 
 class AlignmentData(TypedDict):

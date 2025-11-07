@@ -1,4 +1,4 @@
-from typing import Sequence, Any
+from typing_extensions import Sequence, Any
 
 from utils import PathDict, ParsedConfigInput
 

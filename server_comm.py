@@ -4,9 +4,10 @@ import websockets
 import logging
 import time
 import json
-from typing import Literal, Any, TypedDict, Union
+from typing_extensions import Literal, Any, TypedDict, Union
 
 from auth import Auth
+from utils import validate_type
 
 
 logger = logging.getLogger(__name__)
@@ -189,7 +190,11 @@ class ServerComm:
 
     async def _process_response(self, response: websockets.Data) -> None:
         try:
-            response_obj: ServerResponseType = json.loads(response)
+            response_obj = json.loads(response)
+            if not validate_type(response_obj, ServerResponseType):
+                return  # Failed validation
+            response_obj: ServerResponseType
+
             content = response_obj["content"]
             msg_id = response_obj["msg_id"]
         except:

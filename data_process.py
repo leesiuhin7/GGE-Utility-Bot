@@ -1,6 +1,6 @@
 import json
 import logging
-from typing import Any, TypedDict, Literal
+from typing_extensions import Any, TypedDict, Literal
 
 import utils
 

@@ -1,6 +1,9 @@
 import json
 import io
-from typing import TypedDict, Literal, Any, overload, Sequence
+import pydantic
+from typing_extensions import (
+    TypedDict, Literal, Any, overload, Sequence, Type,
+)
 
 
 class ParsedConfigInput(TypedDict):
@@ -191,3 +194,49 @@ def kid_to_name(kid: int) -> str | None:
         4: "The Storm Islands",
     }
     return name_map.get(kid)
+
+
+class _TypeValidator:
+    CACHE_MAX_LEN: int = 1024
+    _cache_keys: list[Type] = []
+    _cache_items: list[pydantic.TypeAdapter] = []
+
+    @classmethod
+    def validate_type(cls, obj: Any, obj_type: Type) -> bool:
+        try:
+            # Use cache
+            type_adapter = cls._cache_items[
+                cls._cache_keys.index(obj_type)
+            ]
+        except:
+            type_adapter = pydantic.TypeAdapter(obj_type)
+            # Add to cache
+            cls._cache_keys.insert(0, obj_type)
+            cls._cache_items.insert(0, type_adapter)
+
+            # Remove excess
+            if len(cls._cache_keys) > cls.CACHE_MAX_LEN:
+                cls._cache_keys.pop()
+                cls._cache_items.pop()
+
+        try:
+            type_adapter.validate_python(
+                obj, strict=True, extra="forbid",
+            )
+            return True
+        except pydantic.ValidationError:
+            return False
+
+
+def validate_type(obj: Any, obj_type: Type) -> bool:
+    """
+    Checks whether an object is the specified type.
+
+    :param obj: The object
+    :type obj: Any
+    :param obj_type: The type to compare the object against
+    :type obj_type: Type
+    :return: True if the object's type matches, False otherwise
+    :rtype: bool
+    """
+    return _TypeValidator.validate_type(obj, obj_type)
