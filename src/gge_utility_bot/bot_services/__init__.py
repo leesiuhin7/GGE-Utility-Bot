@@ -14,7 +14,7 @@ __all__ = [
 
 
 def init() -> None:
-    from config import cfg
+    from gge_utility_bot.config import cfg
     AttackListener.REQUEST_COOLDOWN = (
         cfg["attack_listener"]["request_cooldown"]
     )
