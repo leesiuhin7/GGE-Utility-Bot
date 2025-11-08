@@ -1,8 +1,14 @@
-import json
 import io
+import json
+
 import pydantic
 from typing_extensions import (
-    TypedDict, Literal, Any, overload, Sequence, Type,
+    Any,
+    Literal,
+    overload,
+    Sequence,
+    Type,
+    TypedDict,
 )
 
 

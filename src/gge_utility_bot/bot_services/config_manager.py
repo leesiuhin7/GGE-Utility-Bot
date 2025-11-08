@@ -1,6 +1,6 @@
-from typing_extensions import Sequence, Any
+from typing_extensions import Any, Sequence
 
-from utils import PathDict, ParsedConfigInput
+from gge_utility_bot.utils import ParsedConfigInput, PathDict
 
 
 class ConfigManager:

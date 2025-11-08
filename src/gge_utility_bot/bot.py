@@ -1,24 +1,23 @@
-import discord
-from discord.ext import commands
-from discord import app_commands
 import asyncio
-import logging
 import io
-from typing_extensions import Any, TypedDict, Union, Literal
+import logging
 
-from config import GuildInfoConfigType
-import utils
-from utils import ParsedConfigInput
-from bot_services import (
+import discord
+from discord import app_commands
+from discord.ext import commands
+from typing_extensions import Any, Literal, TypedDict, Union
+
+from gge_utility_bot import data_process as dp
+from gge_utility_bot import utils
+from gge_utility_bot.bot_services import (
     AttackListener,
-    RoutingInfo,
-    summarize_battle_report,
-    StatusMonitor,
     ConfigManager,
+    RoutingInfo,
+    StatusMonitor,
+    summarize_battle_report,
 )
-import data_process as dp
-from messages import MESSAGES
-
+from gge_utility_bot.config import GuildInfoConfigType
+from gge_utility_bot.messages import MESSAGES
 
 logger = logging.getLogger(__name__)
 
@@ -420,7 +419,8 @@ class BotManager:
             return False
 
         # Load and parse config messages
-        parsed_msgs: list[ParsedConfigInput] = []  # Latest to oldest
+        # Latest to oldest
+        parsed_msgs: list[utils.ParsedConfigInput] = []
         prev_msg = None
         end = False
         while not end:

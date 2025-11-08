@@ -1,8 +1,9 @@
-import pytest
 import copy
-from typing_extensions import Sequence, Any, Type, TypedDict
 
-import utils
+import pytest
+from typing_extensions import Any, Sequence, Type, TypedDict
+
+from gge_utility_bot import utils
 
 
 @pytest.mark.parametrize("config_input, expected", [

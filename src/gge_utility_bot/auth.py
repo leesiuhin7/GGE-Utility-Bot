@@ -1,8 +1,9 @@
+import base64
+
 from cryptography.hazmat.primitives import hashes, hmac
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
 )
-import base64
 
 
 def init(private_key: str) -> None:

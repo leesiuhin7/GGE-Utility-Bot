@@ -1,4 +1,4 @@
-from typing_extensions import TypedDict, Literal
+from typing_extensions import Literal, TypedDict
 
 
 class ConfigType(TypedDict):
