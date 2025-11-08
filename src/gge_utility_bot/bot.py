@@ -23,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 
 def init() -> None:
-    from config import cfg
+    from gge_utility_bot.config import cfg
     BotManager.GUILD_INFOS = cfg["discord"]["guilds"]
 
 

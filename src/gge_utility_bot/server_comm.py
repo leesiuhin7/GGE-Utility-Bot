@@ -33,7 +33,7 @@ class ServerResponseType(TypedDict):
 
 
 def init() -> None:
-    from config import cfg
+    from gge_utility_bot.config import cfg
     ServerComm.RECONNECT_COOLDOWN = (
         cfg["server"]["reconnect_cooldown"]
     )
