@@ -1,9 +1,9 @@
 import json
 import logging
-from typing_extensions import Any, TypedDict, Literal
 
-import utils
+from typing_extensions import Any, Literal, TypedDict
 
+from gge_utility_bot import utils
 
 logger = logging.getLogger(__name__)
 

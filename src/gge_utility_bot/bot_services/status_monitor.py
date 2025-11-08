@@ -1,8 +1,8 @@
 import asyncio
 
-from config import PlayerConfigType
-from server_comm import ServerComm
-import data_process as dp
+from gge_utility_bot import data_process as dp
+from gge_utility_bot.config import PlayerConfigType
+from gge_utility_bot.server_comm import ServerComm
 
 
 class StatusMonitor:

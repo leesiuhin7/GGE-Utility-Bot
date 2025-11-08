@@ -1,14 +1,14 @@
 import asyncio
-from websockets.asyncio.client import ClientConnection
-import websockets
+import json
 import logging
 import time
-import json
-from typing_extensions import Literal, Any, TypedDict, Union
 
-from auth import Auth
-from utils import validate_type
+import websockets
+from typing_extensions import Any, Literal, TypedDict, Union
+from websockets.asyncio.client import ClientConnection
 
+from gge_utility_bot.auth import Auth
+from gge_utility_bot.utils import validate_type
 
 logger = logging.getLogger(__name__)
 

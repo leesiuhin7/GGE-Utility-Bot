@@ -1,23 +1,24 @@
 import asyncio
-import quart
-import os
 import logging
+import os
 import signal
+
 import discord
+import quart
 from discord.ext import commands
 
-import config
-from bot import BotManager
-from bot_services import (
-    AttackListener, StatusMonitor, ConfigManager,
+from gge_utility_bot import config
+from gge_utility_bot.auth import init as auth_init
+from gge_utility_bot.bot import BotManager
+from gge_utility_bot.bot import init as bot_init
+from gge_utility_bot.bot_services import (
+    AttackListener,
+    ConfigManager,
+    StatusMonitor,
 )
-from server_comm import ServerComm
-
-from auth import init as auth_init
-from server_comm import init as server_comm_init
-from bot import init as bot_init
-from bot_services import init as bot_services_init
-
+from gge_utility_bot.bot_services import init as bot_services_init
+from gge_utility_bot.server_comm import ServerComm
+from gge_utility_bot.server_comm import init as server_comm_init
 
 app = quart.Quart(__name__)
 

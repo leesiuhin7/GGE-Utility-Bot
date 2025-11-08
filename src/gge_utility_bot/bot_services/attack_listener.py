@@ -1,12 +1,12 @@
 import asyncio
 import logging
+
 from typing_extensions import TypedDict
 
-from server_comm import ServerComm
-from config import PlayerConfigType
-import data_process as dp
-from utils import validate_type
-
+from gge_utility_bot import data_process as dp
+from gge_utility_bot.config import PlayerConfigType
+from gge_utility_bot.server_comm import ServerComm
+from gge_utility_bot.utils import validate_type
 
 logger = logging.getLogger(__name__)
 
