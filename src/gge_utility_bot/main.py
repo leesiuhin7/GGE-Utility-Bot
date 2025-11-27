@@ -9,8 +9,8 @@ from discord.ext import commands
 
 from gge_utility_bot import config
 from gge_utility_bot.auth import init as auth_init
-from gge_utility_bot.bot import BotManager
-from gge_utility_bot.bot import init as bot_init
+from gge_utility_bot.bot_manager import BotManager
+from gge_utility_bot.bot_manager import init as bot_init
 from gge_utility_bot.bot_services import (
     AttackListener,
     ConfigManager,
