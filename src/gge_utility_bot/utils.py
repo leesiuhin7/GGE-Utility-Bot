@@ -1,15 +1,22 @@
+import asyncio
 import io
 import json
 
 import pydantic
 from typing_extensions import (
     Any,
+    Awaitable,
+    Callable,
+    Generic,
     Literal,
-    overload,
+    ParamSpec,
     Sequence,
     Type,
     TypedDict,
+    overload,
 )
+
+P = ParamSpec("P")
 
 
 class ParsedConfigInput(TypedDict):
@@ -246,3 +253,41 @@ def validate_type(obj: Any, obj_type: Type) -> bool:
     :rtype: bool
     """
     return _TypeValidator.validate_type(obj, obj_type)
+
+
+class AsyncCallbackManager(Generic[P]):
+    def __init__(self) -> None:
+        self._id = 0
+        self._callbacks: dict[
+            int,  Callable[P, Awaitable[None]],
+        ] = {}
+
+    async def on_event(
+        self,
+        *args: P.args,
+        **kwargs: P.kwargs,
+    ) -> None:
+        await asyncio.gather(
+            *[
+                callback(*args, **kwargs)
+                for callback in self._callbacks.values()
+            ],
+            return_exceptions=True,
+        )
+
+    def add_callback(
+        self,
+        callback: Callable[P, Awaitable[None]],
+    ) -> int:
+        callback_id = self._new_id()
+        self._callbacks[callback_id] = callback
+        return callback_id
+
+    def remove_callback(self, callback_id: int) -> None:
+        if callback_id in self._callbacks:
+            del self._callbacks[callback_id]
+
+    def _new_id(self) -> int:
+        new_id = self._id
+        self._id += 1
+        return new_id

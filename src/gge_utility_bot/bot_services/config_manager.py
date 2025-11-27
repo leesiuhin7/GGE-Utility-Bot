@@ -1,6 +1,40 @@
-from typing_extensions import Any, Sequence
+from typing_extensions import Any, Sequence, TypedDict
 
 from gge_utility_bot.utils import ParsedConfigInput, PathDict
+
+
+class AttackListenerRoutingConfigType(TypedDict):
+    username: str
+    server: str
+    channel_ids: dict[str, int]
+
+
+class BattleReportSummaryConfigType(TypedDict):
+    enabled: bool
+
+
+class AttackListenerConfigType(TypedDict):
+    enabled: bool
+    routes: list[AttackListenerRoutingConfigType]
+
+
+class BattleReportConfigType(TypedDict):
+    channel_ids: dict[str, int]
+    summary: BattleReportSummaryConfigType
+
+
+class StormSearcherConfigType(TypedDict):
+    enabled: bool
+
+
+class ServiceConfigType(TypedDict):
+    attack_listener: AttackListenerConfigType
+    battle_report: BattleReportConfigType
+    storm_searcher: StormSearcherConfigType
+
+
+class ConfigType(TypedDict):
+    services: ServiceConfigType
 
 
 class ConfigManager:
