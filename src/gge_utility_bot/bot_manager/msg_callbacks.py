@@ -70,7 +70,7 @@ class MessageCallbacks:
             return
 
         for attachment in message.attachments:
-            if self._is_image(attachment):
+            if not self._is_image(attachment):
                 continue
 
             # Save image file to buffer
