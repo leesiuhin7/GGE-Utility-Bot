@@ -15,7 +15,7 @@ from gge_utility_bot.config import GuildInfoConfigType
 from .atk_warning import AtkWarningRouter
 from .bot_commands import ConfigCommandGroup, PuppetCommandGroup
 from .msg_callbacks import MessageCallbacks
-from .utils import BotUtils, load_config_from_channel
+from .utils import BotUtils
 
 logger = logging.getLogger(__name__)
 
@@ -48,11 +48,7 @@ class BotManager:
         ) = utils.AsyncCallbackManager()
 
         self._msg_callbacks = MessageCallbacks(
-            bot_utils=self._bot_utils,
             config_manager=self._config_manager,
-        )
-        self._msg_callback_manager.add_callback(
-            self._msg_callbacks.on_config_msg,
         )
         self._msg_callback_manager.add_callback(
             self._msg_callbacks.on_battle_report_msg,
@@ -104,22 +100,10 @@ class BotManager:
         bg_msg_coro = self._bg_msg_loop()
         atk_warning_coro = self._atk_warning_loop()
 
-        load_config_coros = [
-            load_config_from_channel(
-                bot_utils=self._bot_utils,
-                config_manager=self._config_manager,
-                guild_id=guild_info["guild_id"],
-                config_channel=guild_info["config_channel"],
-            )
-            for guild_info in self.GUILD_INFOS
-        ]
-
         all_coros = [
             bg_msg_coro,
             atk_warning_coro,
-            *load_config_coros,
         ]
-
         # Wait for all task to complete
         try:
             await asyncio.gather(

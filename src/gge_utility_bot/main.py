@@ -17,6 +17,7 @@ from gge_utility_bot.bot_services import (
     StatusMonitor,
 )
 from gge_utility_bot.bot_services import init as bot_services_init
+from gge_utility_bot.db_comm import DBConnection
 from gge_utility_bot.server_comm import ServerComm
 from gge_utility_bot.server_comm import init as server_comm_init
 
@@ -36,12 +37,14 @@ async def main() -> None:
     CONFIG_PATH = os.environ.get("CONFIG_PATH")
     CONTROL_PRIVATE_KEY = os.environ.get("CONTROL_PRIVATE_KEY")
     BOT_TOKEN = os.environ.get("BOT_TOKEN")
+    DB_URI = os.environ.get("DB_URI")
     PORT = int(os.environ.get("PORT", 10000))
 
     if (
         CONFIG_PATH is None
         or CONTROL_PRIVATE_KEY is None
         or BOT_TOKEN is None
+        or DB_URI is None
     ):
         logging.critical(
             "Mandatory environment variables are missing. Exiting.",
@@ -82,9 +85,11 @@ async def main() -> None:
     )
 
     server_comm = ServerComm()
+    db_client = await DBConnection.connect(DB_URI)
+
     attack_listener = AttackListener(server_comm)
     status_monitor = StatusMonitor(server_comm)
-    config_manager = ConfigManager()
+    config_manager = ConfigManager(db_client)
 
     bot_manager = BotManager(
         bot=bot,
