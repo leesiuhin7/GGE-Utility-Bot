@@ -1,104 +1,146 @@
 import pytest
 import pytest_mock
+from typing_extensions import Any, Literal, Self, Sequence
 
 from gge_utility_bot.bot_services.config_manager import ConfigManager
-from gge_utility_bot.utils import ParsedConfigInput
+
+
+class MockAsyncCommandCursor:
+    def __init__(self, outputs: Sequence[Any]) -> None:
+        self._outputs = outputs
+        self._index = 0
+
+    async def __aenter__(self) -> Self:
+        return self
+
+    async def __aexit__(self, exc_type, exc, tb) -> None:
+        return
+
+    def __aiter__(self) -> Self:
+        return self
+
+    async def __anext__(self) -> dict[Literal["output"], Any]:
+        if self._index < len(self._outputs):
+            value = self._outputs[self._index]
+            self._index += 1
+            return {"output": value}
+        else:
+            raise StopAsyncIteration
 
 
 @pytest.fixture
 def config_manager(mocker: pytest_mock.MockFixture) -> ConfigManager:
-    config_manager = ConfigManager()
-
-    mock_path_dict = mocker.MagicMock()
-    config_manager._guild_configs = {
-        "1234": mock_path_dict,
-    }
+    mock_AsyncMongoClient = mocker.patch(
+        "pymongo.AsyncMongoClient",
+    )
+    mock_db_client = mock_AsyncMongoClient.return_value
+    config_manager = ConfigManager(mock_db_client)
     return config_manager
 
 
-@pytest.mark.parametrize("guild_id, path", [
-    (1234, []),
-    (1234, ["key", ""]),
-])
-def test_config_manager_get_valid(
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "aggregate_outputs, path, is_valid_path",
+    [
+        [[1, 2, 3], "abc", True],
+        [[4, 5, 6], "ab.c", True],
+        [[], "abcd.efg", True],
+        [[0, 7], "_id", False],
+        [[8, 9], "$abc.def", False],
+    ],
+)
+async def test_config_manager_get(
     mocker: pytest_mock.MockFixture,
     config_manager: ConfigManager,
-    guild_id: int,
-    path: list[str],
+    aggregate_outputs: Sequence[Any],
+    path: str,
+    is_valid_path: bool,
 ) -> None:
-    mock_get = mocker.patch.object(
-        target=config_manager._guild_configs["1234"],
-        attribute="get",
+    mocker.patch.object(
+        config_manager._collection,
+        "aggregate",
+        side_effect=lambda *args, **kwargs: (
+            MockAsyncCommandCursor(aggregate_outputs)
+        ),
+        new_callable=mocker.AsyncMock,
     )
-
-    config_manager.get(guild_id, path)
-    mock_get.assert_called_once_with(path)
-
-
-@pytest.mark.parametrize("guild_id, path", [
-    (0, ["key"]),
-])
-def test_config_manager_get_invalid(
-    config_manager: ConfigManager,
-    guild_id: int,
-    path: list[str],
-) -> None:
-    with pytest.raises(ConfigManager.GuildNotFoundError):
-        config_manager.get(guild_id, path)
-
-
-@pytest.mark.parametrize("guild_id, parsed_inputs, success", [
-    (1234, [], True),
-    (
-        1234,
-        [{
-            "path": ["key"],
-            "action": "set",
-            "value": 1,
-        }, {
-            "path": ["key2", "abc"],
-            "action": "delete",
-        }],
-        False,
-    ),
-])
-def test_config_manager_load(
-    mocker: pytest_mock.MockFixture,
-    config_manager: ConfigManager,
-    guild_id: int,
-    parsed_inputs: list[ParsedConfigInput],
-    success: bool,
-) -> None:
-    mock_update = mocker.patch.object(
-        target=config_manager,
-        attribute="update",
-        return_value=success,
-    )
-    assert config_manager.load(guild_id, parsed_inputs) is success
-
-
-@pytest.mark.parametrize("guild_id, parsed_input, success", [
-    (1234, {"path": [""], "action": "set", "value": ""}, True),
-    (1234, {"path": [], "action": "delete", "value": None}, True),
-    (5678, {"path": ["key"], "action": "set", "value": 0}, True),
-    (5678, {"path": [""], "action": "delete", "value": None}, False),
-])
-def test_config_manager_update(
-    mocker: pytest_mock.MockFixture,
-    config_manager: ConfigManager,
-    guild_id: int,
-    parsed_input: ParsedConfigInput,
-    success: bool,
-) -> None:
-    mock_update = mocker.patch.object(
-        target=config_manager._guild_configs["1234"],
-        attribute="update",
-        return_value=True,
-    )
-
-    assert config_manager.update(guild_id, parsed_input) == success
-
-    if guild_id == 1234:
-        mock_update.assert_called_once()
+    if not aggregate_outputs:
+        # Expects error as the iterable will be empty which
+        # means no results received
+        with pytest.raises(ConfigManager.InvalidPathError):
+            await config_manager.get(0, path)
+    elif not is_valid_path:
+        # Expects error as it should not allow an invalid path
+        with pytest.raises(ConfigManager.InvalidPathError):
+            await config_manager.get(0, path)
     else:
-        mock_update.assert_not_called()
+        # Expects the first result received by the function
+        # (from the iterable) to be returned
+        result = await config_manager.get(0, path)
+        assert result == aggregate_outputs[0]
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path, is_valid_path, fail_update",
+    [
+        ["abc", True, False],
+        ["ab.cd", True, True],
+        ["_id", False, True],
+        ["$xyz.abc", False, False],
+    ],
+)
+async def test_config_manager_update(
+    mocker: pytest_mock.MockFixture,
+    config_manager: ConfigManager,
+    path: str,
+    is_valid_path: bool,
+    fail_update: bool,
+) -> None:
+    mocker.patch.object(
+        config_manager._collection,
+        "update_one",
+        side_effect=(Exception if fail_update else None),
+        new_callable=mocker.AsyncMock,
+    )
+
+    result = await config_manager.update(0, path, None)
+    if not is_valid_path:
+        assert result is False
+    elif fail_update:
+        assert result is False
+    else:
+        assert result is True
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "path, is_valid_path, fail_update",
+    [
+        ["xyz", True, False],
+        ["ab.pq", True, True],
+        ["_id", False, True],
+        ["$abc.def", False, False],
+    ],
+)
+async def test_config_manager_delete(
+    mocker: pytest_mock.MockFixture,
+    config_manager: ConfigManager,
+    path: str,
+    is_valid_path: bool,
+    fail_update: bool,
+) -> None:
+    mocker.patch.object(
+        config_manager._collection,
+        "update_one",
+        side_effect=(Exception if fail_update else None),
+        new_callable=mocker.AsyncMock,
+    )
+
+    result = await config_manager.delete(0, path)
+    if not is_valid_path:
+        assert result is False
+    elif fail_update:
+        assert result is False
+    else:
+        assert result is True

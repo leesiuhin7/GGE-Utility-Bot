@@ -1,9 +1,9 @@
+import json
+
 import discord
 from discord.ext import commands
-from typing_extensions import AsyncGenerator, Union
+from typing_extensions import Any, AsyncGenerator, Union
 
-from gge_utility_bot import utils
-from gge_utility_bot.bot_services import ConfigManager
 from gge_utility_bot.config import GuildInfoConfigType
 
 
@@ -97,81 +97,17 @@ class BotUtils:
                 return guild_info["guild_id"]
 
 
-async def get_msg_history(
-    messageable: discord.abc.Messageable,
-) -> AsyncGenerator[discord.Message]:
+def user_input_to_obj(value: str) -> Any:
     """
-    Returns an asynchronous generator that allows message history
-    of the target to be accessed.
+    Convert user input into an object.
 
-    :param messageable: The target to access message history from
-    :type messageable: discord.abc.Messageable
-    :return: An asynchronous generator
-    :rtype: AsyncGenerator[discord.Message]
-    :yield: A message object starting from the latest to oldest
-    :rtype: Iterator[AsyncGenerator[discord.Message]]
+    :param value: User input
+    :type value: str
+    :raises ValueError: When user input cannot be converted
+    :return: The converted object
+    :rtype: Any
     """
-    prev_msg: discord.Message | None = None
-    while True:
-        no_msg = True
-        async for msg in messageable.history(before=prev_msg):
-            prev_msg = msg
-            no_msg = False
-            yield msg
-
-        if no_msg:  # Exits if remaining history is empty
-            return
-
-
-async def load_config_from_channel(
-    bot_utils: BotUtils,
-    config_manager: ConfigManager,
-    guild_id: int,
-    config_channel: int,
-) -> bool:
-    """
-    Load configuration for a guild with the specified guild id
-    where configuration is read from the channel with the 
-    specified channel id.
-
-    :param bot_utils: A BotUtils object
-    :type bot_utils: BotUtils
-    :param config_manager: A ConfigManager object used for
-        configuration
-    :type config_manager: ConfigManager
-    :param guild_id: The guild id of the target guild
-    :type guild_id: int
-    :param config_channel: The channel id of the channel where
-        configuration read from
-    :type config_channel: int
-    :return: True if configuration is successfully loaded, False
-        otherwise
-    :rtype: bool
-    """
-    channel = await bot_utils.get_channel(config_channel)
-    if channel is None:
-        return False
-    if isinstance(channel, (
-        discord.abc.PrivateChannel,
-        discord.ForumChannel,
-        discord.CategoryChannel
-    )):
-        return False
-
-    # Load and parse config messages
-    parsed_msgs: list[utils.ParsedConfigInput] = []
-    async for msg in get_msg_history(channel):
-        parsed = utils.parse_config_input(msg.content)
-        if parsed is not None:
-            parsed_msgs.append(parsed)
-            # Operation on the entire config, hence stop here
-            if parsed["path"] == []:
-                break
-
-    # Update config
-    config_manager.load(
-        guild_id,
-        # Reversing so that it starts with the oldest
-        list(reversed(parsed_msgs)),
-    )
-    return True
+    try:
+        return json.loads(value)
+    except:
+        raise ValueError

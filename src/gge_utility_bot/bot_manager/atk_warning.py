@@ -1,6 +1,7 @@
 import asyncio
 
 from gge_utility_bot.bot_services import ConfigManager, RoutingInfo
+from gge_utility_bot.utils import validate_type
 
 from .types import GuildAttackListenerRoutingConfigType, RouteChannels
 from .utils import BotUtils
@@ -20,12 +21,13 @@ class AtkWarningRouter:
         Get the id of each unique valid channels that is configured
         to receive the specific attack warning.
 
-        :param routing_info: _description_
+        :param routing_info: The information used for routing
         :type routing_info: RoutingInfo
-        :return: _description_
+        :return: The ids of all channels that should receive the
+            specific attack warning
         :rtype: set[int]
         """
-        routes = self._get_atk_listener_routes(routing_info)
+        routes = await self._get_atk_listener_routes(routing_info)
         channel_ids: set[int] = set()
 
         # Update channel_ids with all valid channels
@@ -40,7 +42,7 @@ class AtkWarningRouter:
         )
         return channel_ids
 
-    def _get_atk_listener_routes(
+    async def _get_atk_listener_routes(
         self,
         routing_info: RoutingInfo,
     ) -> list[RouteChannels]:
@@ -53,42 +55,70 @@ class AtkWarningRouter:
         :return: A list of routing information for each guild
         :rtype: list[RouteChannels]
         """
-        route_channels: list[RouteChannels] = []
+        # Using asyncio.gather here to allow faster reads
+        results = await asyncio.gather(
+            *[
+                self._get_guild_atk_listener_routes(
+                    guild_id, routing_info,
+                )
+                for guild_id in routing_info["routes"]
+            ],
+        )
+        # Only include the ones that succeeded
+        return [
+            route_channels for route_channels in results
+            if route_channels is not None
+        ]
 
-        for guild_id in routing_info["routes"]:
-            try:
-                # Get configs, skip guild if config is malformed
-                enabled: bool = self._config_manager.get(
-                    guild_id,
-                    ["services", "attack_listener", "enabled"],
-                )
-                routes: dict[
-                    str,
-                    GuildAttackListenerRoutingConfigType,
-                ] = self._config_manager.get(
-                    guild_id,
-                    ["services", "attack_listener", "routes"]
-                )
-            except (
-                ConfigManager.GuildNotFoundError,
-                KeyError,
-                TypeError,
+    async def _get_guild_atk_listener_routes(
+        self,
+        guild_id: int,
+        routing_info: RoutingInfo,
+    ) -> RouteChannels | None:
+        """
+        Find all channels that are configured in the guild with the
+        specified id to receive the specific attack warning.
+
+        :param guild_id: The id of the guild
+        :type guild_id: int
+        :param routing_info: The information used for routing
+        :type routing_info: RoutingInfo
+        :return: The ids of all channels that are configured to 
+            receive the attack warning, and the id of the guild
+            that is responsible for the configuration
+        :rtype: RouteChannels | None
+        """
+        try:
+            enabled = await self._config_manager.get(
+                guild_id,
+                "services.attack_listener.enabled",
+            )
+            routes = await self._config_manager.get(
+                guild_id,
+                "services.attack_listener.routes",
+            )
+        except ConfigManager.InvalidPathError:
+            return
+
+        # Validate type
+        if enabled is not True:
+            return
+        try:
+            if not validate_type(
+                routes,
+                dict[str, GuildAttackListenerRoutingConfigType],
             ):
-                continue
+                return
+        except:
+            return
 
-            if not enabled:
-                continue
-
-            # Append all channels needed routing in a guild
-            route_channels.append({
-                "guild_id": guild_id,
-                "channel_ids": self._get_route_target_channel_ids(
-                    config_routes=routes,
-                    routing_info=routing_info,
-                ),
-            })
-
-        return route_channels
+        return {
+            "channel_ids": self._get_route_target_channel_ids(
+                config_routes=routes,
+                routing_info=routing_info,
+            ),
+            "guild_id": guild_id,
+        }
 
     def _get_route_target_channel_ids(
         self,
@@ -106,7 +136,8 @@ class AtkWarningRouter:
             dict[str, GuildAttackListenerRoutingConfigType]
         :param routing_info: The information used for routing
         :type routing_info: RoutingInfo
-        :return: _description_
+        :return: The ids of all channels that are configured to
+            receive the attack warning
         :rtype: set[int]
         """
         channels: set[int] = set()
@@ -134,9 +165,12 @@ class AtkWarningRouter:
         """
         Get all channels that are in the guild with the specified id.
 
-        :param route_channels: _description_
+        :param route_channels: The ids of all channels that are 
+            configured to receive the attack warning, and the id 
+            of the guild that is responsible for the configuration
         :type route_channels: RouteChannels
-        :return: _description_
+        :return: The ids of all given channels that are also in
+            the guild with the specified id
         :rtype: set[int]
         """
         guild_id = route_channels["guild_id"]

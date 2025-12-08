@@ -1,6 +1,5 @@
-from typing_extensions import Any, Sequence, TypedDict
-
-from gge_utility_bot.utils import ParsedConfigInput, PathDict
+from pymongo import AsyncMongoClient
+from typing_extensions import Any, TypedDict
 
 
 class AttackListenerRoutingConfigType(TypedDict):
@@ -38,99 +37,148 @@ class ConfigType(TypedDict):
 
 
 class ConfigManager:
-    class GuildNotFoundError(KeyError):
-        """Raised when a guild is not registered."""
+    class InvalidPathError(Exception):
+        """Raised when an invalid path is received."""
 
-    def __init__(self) -> None:
-        self._guild_configs: dict[str, PathDict] = {}
-
-    def get(self, guild_id: int, path: Sequence[str]) -> Any:
-        """
-        Get the config of the specified guild at the specified path.
-
-        :param guild_id: The id of the guild
-        :type guild_id: int
-        :param path: A list of keys that defines the path of the
-            target value within the entire config
-        :type path: Sequence[str]
-        :raises ConfigManager.GuildNotFoundError: If guild has not 
-            been registered
-        :raises KeyError: If path is not valid
-        :raises TypeError: If path is not valid
-        :return: The taregt value at the given path
-        :rtype: Any
-        """
-        guild_config = self._guild_configs.get(str(guild_id))
-        if guild_config is None:
-            raise ConfigManager.GuildNotFoundError
-
-        return guild_config.get(path)
-
-    def load(
+    def __init__(
         self,
-        guild_id: int,
-        parsed_inputs: list[ParsedConfigInput],
-    ) -> bool:
-        """
-        Clear and load the config of the given guild.
-
-        :param guild_id: The id of the guild
-        :type guild_id: int
-        :param parsed_inputs: A list of update operations that will
-            be carried out in order after clearing the config. The
-            first element will be carried out first, hence it should
-            be the oldest operation.
-        :type parsed_inputs: list[ParsedConfigInput]
-        :return: True if all operations succeeded, False otherwise
-        :rtype: bool
-        """
-        # Clear loaded config
-        self.update(
-            guild_id,
-            {"action": "delete", "path": [], "value": None},
+        db_client: AsyncMongoClient[dict[str, Any]],
+    ) -> None:
+        self._db_client = db_client
+        self._database = (
+            self._db_client.get_database("GGE-utility-bot")
+        )
+        self._collection = (
+            self._database.get_collection("user-config")
         )
 
-        # Using "success = result and success" so that any fails
-        # would lead to success being False
-        success = True
-
-        # Update config
-        for parsed in parsed_inputs:
-            success = self.update(guild_id, parsed) and success
-
-        return success
-
-    def update(
-        self,
-        guild_id: int,
-        parsed_input: ParsedConfigInput,
-    ) -> bool:
+    async def get(self, guild_id: int, path: str) -> Any:
         """
-        Update the config of the given guild.
+        Read the value of a field specified by the given path,
+        from the configuration of the guild with the given id.
 
         :param guild_id: The id of the guild
         :type guild_id: int
-        :param parsed_input: The update operation that will
-            be carried out
-        :type parsed_input: ParsedConfigInput
-        :return: True if the operation succeeded, False otherwise
+        :param path: The path to the field to be read from
+        :type path: str
+        :raises self.InvalidPathError: When the given path cannot
+            access any fields
+        :return: The value of the specified field
+        :rtype: Any
+        """
+        if not self._validate_path(path):
+            # Allow empty path as reference to root
+            if path != "":
+                raise self.InvalidPathError
+
+        # Matches if the path is valid for the specified guild
+        if path != "":
+            pipeline = [
+                {"$match": {
+                    "_id": guild_id,
+                    path: {"$exists": True},
+                }},
+                {"$project": {"output": f"${path}"}},
+            ]
+        else:
+            # path refers to the root path instead if empty
+            pipeline = [
+                {"$match": {
+                    "_id": guild_id,
+                }},
+                {"$project": {"_id": 0}},  # Remove _id field
+                {"$project": {"output": "$$ROOT"}},
+            ]
+
+        try:
+            async with (
+                await self._collection.aggregate(pipeline)
+            ) as cursor:
+                async for result in cursor:
+                    return result["output"]
+        except:  # AsyncCollection.aggregate may raise unknown errors
+            pass
+
+        # Raise exception if no result is found
+        raise self.InvalidPathError
+
+    async def update(
+        self,
+        guild_id: int,
+        path: str,
+        value: Any,
+    ) -> bool:
+        """
+        Overwrite the value of a field specified by the given path
+        with the given value, from the configuration of the guild
+        with the given id.
+
+        :param guild_id: The id of the guild
+        :type guild_id: int
+        :param path: The path to the field to be overwritten
+        :type path: str
+        :param value: The value to overwrite with
+        :type value: Any
+        :return: False if the operation failed, True otherwise
         :rtype: bool
         """
-        key = str(guild_id)
-        if parsed_input["action"] == "set":
-            if key not in self._guild_configs:
-                self._guild_configs[key] = PathDict()
-
-            return self._guild_configs[key].update(
-                path=parsed_input["path"],
-                action="set",
-                value=parsed_input["value"],
+        if not self._validate_path(path):
+            return False
+        try:
+            await self._collection.update_one(
+                filter={"_id": guild_id},
+                update={"$set": {path: value}},
+                upsert=True,
             )
-        else:
-            if key not in self._guild_configs:
-                return False
+        except:
+            return False
+        return True
 
-            return self._guild_configs[key].update(
-                path=parsed_input["path"],
-                action="delete",
+    async def delete(
+        self,
+        guild_id: int,
+        path: str,
+    ) -> bool:
+        """
+        Remove a field specified by the given path, from the
+        configuration of the guild with the given id.
+
+        :param guild_id: The id of the guild
+        :type guild_id: int
+        :param path: The path to the field to be removed
+        :type path: str
+        :return: False if the operation failed, True otherwise
+        :rtype: bool
+        """
+        if not self._validate_path(path):
+            return False
+        try:
+            await self._collection.update_one(
+                filter={"_id": guild_id},
+                update={"$unset": {path: ""}},
             )
+        except:
+            return False
+        return True
+
+    def _validate_path(self, path: str) -> bool:
+        """
+        Validate the given path to ensure it is safe to pass
+        onto the database to avoid security issues.
+
+        :param path: The path to be validated
+        :type path: str
+        :return: False if the path is unsafe to be used, 
+            True otherwise
+        :rtype: bool
+        """
+        if path == "_id":
+            # The _id field should be hidden from users
+            return False
+        if path.startswith("$"):
+            # Field paths cannot begin with "$"
+            return False
+        if path == "":
+            # Field paths cannot be empty
+            return False
+        return True
