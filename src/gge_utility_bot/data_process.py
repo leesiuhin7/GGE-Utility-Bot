@@ -1,7 +1,7 @@
 import json
 import logging
 
-from typing_extensions import Any, Literal, TypedDict
+from typing_extensions import Any, Literal, Self, TypedDict
 
 from gge_utility_bot import utils
 
@@ -37,38 +37,117 @@ class PuppetStatusOutputType(TypedDict):
     attack_warnings: Literal["enabled", "disabled"]
 
 
-class AttackListener:
-    @classmethod
-    def serialize(cls, deserialized: UnpackedAttackDataType) -> str:
-        remaining_time = deserialized["remaining_time"]
-        kid = deserialized["kid"]
-        target_x = deserialized["target_x"]
-        target_y = deserialized["target_y"]
-        target_name = deserialized["target_name"]
-        target_player_name = deserialized["target_player_name"]
-        attacker_x = deserialized["attacker_x"]
-        attacker_y = deserialized["attacker_y"]
-        attacker_name = deserialized["attacker_name"]
-        attacker_player_name = deserialized["attacker_player_name"]
-        est_count = deserialized["est_count"]
+class AttackWarningBuilder:
+    def __init__(self) -> None:
+        self._remaining_time: int | None = None
+        self._kid: int | None = None
+        self._target_x: int | None = None
+        self._target_y: int | None = None
+        self._target_name: str | None = None
+        self._target_player_name: str | None = None
+        self._attacker_x: int | None = None
+        self._attacker_y: int | None = None
+        self._attacker_name: str | None = None
+        self._attacker_player_name: str | None = None
+        self._est_count: int | None = None
+
+    def serialize(self) -> str | None:
+        if (
+            self._remaining_time is None
+            or self._kid is None
+            or self._target_x is None
+            or self._target_y is None
+            or self._target_name is None
+            or self._target_player_name is None
+            or self._attacker_x is None
+            or self._attacker_y is None
+            or self._attacker_name is None
+            or self._attacker_player_name is None
+        ):
+            return None
 
         # Convert seconds into time string
-        compound_time = utils.as_compound_time(remaining_time)
-        kingdom_name = utils.kid_to_name(kid)
+        compound_time = utils.as_compound_time(self._remaining_time)
+        kingdom_name = utils.kid_to_name(self._kid)
 
         components = [
             f"Incoming attack in approx. {compound_time}",
-            f"at \"{target_name}\" of \"{target_player_name}\"",
-            f"({target_x}:{target_y})",
-            f"from \"{attacker_name}\" of \"{attacker_player_name}\"",
-            f"({attacker_x}:{attacker_y})",
+            f'at "{self._target_name}" of "{self._target_player_name}"',
+            f"({self._target_x}:{self._target_y})",
+            f'from "{self._attacker_name}" of "{self._attacker_player_name}"',
+            f"({self._attacker_x}:{self._attacker_y})",
         ]
-        if est_count != -1:
-            components.append(f"with approx. {est_count} troop(s)")
+        if self._est_count is not None and self._est_count != -1:
+            components.append(f"with approx. {self._est_count} troop(s)")
         if kingdom_name is not None:
             components.append(f"in {kingdom_name}")
 
         return " ".join(components)
+
+    def remaining_time(self, value: int) -> Self:
+        self._remaining_time = value
+        return self
+
+    def kid(self, value: int) -> Self:
+        self._kid = value
+        return self
+
+    def target_x(self, value: int) -> Self:
+        self._target_x = value
+        return self
+
+    def target_y(self, value: int) -> Self:
+        self._target_y = value
+        return self
+
+    def target_name(self, value: str) -> Self:
+        self._target_name = value
+        return self
+
+    def target_player_name(self, value: str) -> Self:
+        self._target_player_name = value
+        return self
+
+    def attacker_x(self, value: int) -> Self:
+        self._attacker_x = value
+        return self
+
+    def attacker_y(self, value: int) -> Self:
+        self._attacker_y = value
+        return self
+
+    def attacker_name(self, value: str) -> Self:
+        self._attacker_name = value
+        return self
+
+    def attacker_player_name(self, value: str) -> Self:
+        self._attacker_player_name = value
+        return self
+
+    def est_count(self, value: int) -> Self:
+        self._est_count = value
+        return self
+
+
+class AttackListener:
+    @classmethod
+    def create_builder(
+        cls, deserialized: UnpackedAttackDataType
+    ) -> AttackWarningBuilder:
+        return (
+            AttackWarningBuilder()
+            .remaining_time(deserialized["remaining_time"])
+            .kid(deserialized["kid"])
+            .target_x(deserialized["target_x"])
+            .target_y(deserialized["target_y"])
+            .target_name(deserialized["target_name"])
+            .target_player_name(deserialized["target_player_name"])
+            .attacker_x(deserialized["attacker_x"])
+            .attacker_y(deserialized["attacker_y"])
+            .attacker_name(deserialized["attacker_name"])
+            .attacker_player_name(deserialized["attacker_player_name"])
+            .est_count(deserialized["est_count"])
+        )
 
     @classmethod
     def deserialize(
