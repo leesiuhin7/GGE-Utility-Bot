@@ -25,22 +25,22 @@ class AttackListener:
     def __init__(self, server_comm: ServerComm) -> None:
         self._server_comm = server_comm
 
-        self._output_queue: asyncio.Queue[tuple[
-            RoutingInfo, list[str],
-        ]] = asyncio.Queue()
+        self._output_queue: asyncio.Queue[
+            tuple[RoutingInfo, list[dp.AttackWarningBuilder]]
+        ] = asyncio.Queue()
         self._prev_atk_ids: set[int] = set()
 
         self._started = False
         self._tasks: set[asyncio.Task] = set()
 
-    async def get(self) -> tuple[RoutingInfo, list[str]]:
+    async def get(self) -> tuple[RoutingInfo, list[dp.AttackWarningBuilder]]:
         """
-        Get the oldest messages and its respective routing 
+        Get the oldest message builders and its respective routing
         information that were dispatched but haven't been accessed
         yet.
 
-        :return: The oldest messages and its routing information
-        :rtype: tuple[RoutingInfo, list[str]]
+        :return: The oldest message builders and its routing information
+        :rtype: tuple[RoutingInfo, list[dp.AttackWarningBuilder]]
         """
         return await self._output_queue.get()
 
@@ -109,15 +109,15 @@ class AttackListener:
             # Unpack to get message and update index
             msg_list, index = unpacked
 
-            atk_msgs: list[str] = []
+            builders: list[dp.AttackWarningBuilder] = []
             for msg in msg_list:
-                atk_msgs.extend(self._encode_msg(msg))
+                builders.extend(self._convert_msg(msg))
 
-            self._dispatch_atk_msgs(
+            self._dispatch_builders(
                 username=username,
                 server=server,
                 routes=routes,
-                atk_msgs=atk_msgs,
+                builders=builders,
             )
 
     async def _get_current_index(
@@ -200,39 +200,37 @@ class AttackListener:
 
         return response["response"]
 
-    def _encode_msg(self, msg: str) -> list[str]:
+    def _convert_msg(self, msg: str) -> list[dp.AttackWarningBuilder]:
         """
-        Decode a raw message and encode it into useful messages.
+        Decode a raw message and encode it into message builders.
 
         :param msg: A raw message received from the request
         :type msg: str
-        :return: The messages that are useful for users
-        :rtype: list[str]
+        :return: A list of builders that can be serialized into messages
+        :rtype: list[dp.AttackWarningBuilder]
         """
         deserialized = dp.AttackListener.deserialize(msg)
         if deserialized is None:
             return []
 
-        atk_msgs: list[str] = []
-        for atk_data in deserialized:
+        builders: list[dp.AttackWarningBuilder] = []
+        for data in deserialized:
             # Prevent duplicates
-            if atk_data["atk_id"] not in self._prev_atk_ids:
-                self._prev_atk_ids.add(atk_data["atk_id"])
-                atk_msgs.append(
-                    dp.AttackListener.serialize(atk_data),
-                )
-        return atk_msgs
+            if data["atk_id"] not in self._prev_atk_ids:
+                self._prev_atk_ids.add(data["atk_id"])
+                builders.append(dp.AttackListener.create_builder(data))
+        return builders
 
-    def _dispatch_atk_msgs(
+    def _dispatch_builders(
         self,
         *,
         username: str,
         server: str,
         routes: list[int],
-        atk_msgs: list[str],
+        builders: list[dp.AttackWarningBuilder],
     ) -> None:
-        # Check if atk_msgs is empty
-        if not atk_msgs:
+        # No need to dispatch if empty
+        if not builders:
             return
 
         routing_info: RoutingInfo = {
@@ -240,4 +238,4 @@ class AttackListener:
             "server": server,
             "routes": routes,
         }
-        self._output_queue.put_nowait((routing_info, atk_msgs))
+        self._output_queue.put_nowait((routing_info, builders))
