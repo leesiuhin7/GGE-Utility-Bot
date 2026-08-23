@@ -1,11 +1,13 @@
-FROM python:3.11-slim
+FROM ghcr.io/astral-sh/uv:python3.11-trixie-slim
 
 WORKDIR /usr/src/app
 
-COPY requirements.txt .
-RUN pip install --no-cache-dir --progress-bar off -r requirements.txt
+# Install dependencies only for better caching
+COPY pyproject.toml uv.lock ./
+RUN uv sync --frozen --no-install-project
 
-COPY ./src src
+# Install project
+COPY src ./src
+RUN uv sync --frozen
 
-WORKDIR /usr/src/app/src
-CMD ["python", "-m", "gge_utility_bot.main"]
+CMD [".venv/bin/python", "-m", "gge_utility_bot.main"]
