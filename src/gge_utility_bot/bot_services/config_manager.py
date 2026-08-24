@@ -1,11 +1,12 @@
 from pymongo import AsyncMongoClient
-from typing_extensions import Any, TypedDict
+from typing_extensions import Any, NotRequired, TypedDict
 
 
 class AttackListenerRoutingConfigType(TypedDict):
     username: str
     server: str
     channel_ids: dict[str, int]
+    mention_role_ids: NotRequired[dict[str, int]]
 
 
 class BattleReportSummaryConfigType(TypedDict):

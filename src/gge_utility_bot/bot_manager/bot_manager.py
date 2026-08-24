@@ -124,14 +124,19 @@ class BotManager:
     async def _atk_warning_loop(self) -> None:
         while True:
             routing_info, builders = await self._atk_listener.get()
-            channel_ids = await self._atk_warning_router.get_route(
+            route_channels = await self._atk_warning_router.get_route(
                 routing_info,
             )
             for builder in builders:
-                msg = builder.serialize()
-                if msg is not None:
-                    for channel_id in channel_ids:
-                        await self.send_msg(msg, channel_id)
+                for route_channel in route_channels:
+                    builder_copy = builder.copy()
+                    for role_id in route_channel["mention_role_ids"]:
+                        builder_copy.mention_role_id(role_id)
+
+                    msg = builder_copy.serialize()
+                    if msg is not None:
+                        for channel_id in route_channel["channel_ids"]:
+                            await self.send_msg(msg, channel_id)
 
     async def _send_msg(self, msg: str, channel_id: int) -> None:
         channel = self._bot.get_channel(channel_id)

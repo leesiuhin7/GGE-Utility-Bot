@@ -1,3 +1,4 @@
+import copy
 import json
 import logging
 
@@ -50,6 +51,7 @@ class AttackWarningBuilder:
         self._attacker_name: str | None = None
         self._attacker_player_name: str | None = None
         self._est_count: int | None = None
+        self._mention_role_ids: list[int] = []
 
     def serialize(self) -> str | None:
         if (
@@ -70,19 +72,32 @@ class AttackWarningBuilder:
         compound_time = utils.as_compound_time(self._remaining_time)
         kingdom_name = utils.kid_to_name(self._kid)
 
-        components = [
-            f"Incoming attack in approx. {compound_time}",
-            f'at "{self._target_name}" of "{self._target_player_name}"',
-            f"({self._target_x}:{self._target_y})",
-            f'from "{self._attacker_name}" of "{self._attacker_player_name}"',
-            f"({self._attacker_x}:{self._attacker_y})",
-        ]
+        components: list[str] = []
+        if self._mention_role_ids:
+            components.append(
+                "".join(
+                    f"<@&{mention_role_ids}>"
+                    for mention_role_ids in self._mention_role_ids
+                )
+            )
+        components.extend(
+            [
+                f"Incoming attack in approx. {compound_time}",
+                f'at "{self._target_name}" of "{self._target_player_name}"',
+                f"({self._target_x}:{self._target_y})",
+                f'from "{self._attacker_name}" of "{self._attacker_player_name}"',
+                f"({self._attacker_x}:{self._attacker_y})",
+            ]
+        )
         if self._est_count is not None and self._est_count != -1:
             components.append(f"with approx. {self._est_count} troop(s)")
         if kingdom_name is not None:
             components.append(f"in {kingdom_name}")
 
         return " ".join(components)
+
+    def copy(self) -> Self:
+        return copy.deepcopy(self)
 
     def remaining_time(self, value: int) -> Self:
         self._remaining_time = value
@@ -126,6 +141,10 @@ class AttackWarningBuilder:
 
     def est_count(self, value: int) -> Self:
         self._est_count = value
+        return self
+
+    def mention_role_id(self, value: int) -> Self:
+        self._mention_role_ids.append(value)
         return self
 
 
