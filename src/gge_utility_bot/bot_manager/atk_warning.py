@@ -3,7 +3,12 @@ import asyncio
 from gge_utility_bot.bot_services import ConfigManager, RoutingInfo
 from gge_utility_bot.utils import validate_type
 
-from .types import GuildAttackListenerRoutingConfigType, RouteChannels
+from .types import (
+    GuildAttackListenerRoutingConfigType,
+    RouteChannels,
+    RouteTargetInfo,
+    ValidRouteChannels,
+)
 from .utils import BotUtils
 
 
@@ -16,31 +21,26 @@ class AtkWarningRouter:
         self._bot_utils = bot_utils
         self._config_manager = config_manager
 
-    async def get_route(self, routing_info: RoutingInfo) -> set[int]:
+    async def get_route(
+        self, routing_info: RoutingInfo
+    ) -> list[ValidRouteChannels]:
         """
-        Get the id of each unique valid channels that is configured
-        to receive the specific attack warning.
+        Get the id of channels that are configured to receive the
+        attack warning and the id of roles that should are mentioned
+        respectively.
 
         :param routing_info: The information used for routing
         :type routing_info: RoutingInfo
-        :return: The ids of all channels that should receive the
-            specific attack warning
-        :rtype: set[int]
+        :return: A collection of channel ids paired with role ids
+        :rtype: list[ValidRouteChannels]
         """
         routes = await self._get_atk_listener_routes(routing_info)
-        channel_ids: set[int] = set()
-
-        # Update channel_ids with all valid channels
-        # for every route_channels
-        channel_ids.update(
-            *(await asyncio.gather(
-                *[
-                    self._get_valid_channels(route_channels)
-                    for route_channels in routes
-                ],
-            )),
+        return await asyncio.gather(
+            *(
+                self._get_valid_channels(route_channels)
+                for route_channels in routes
+            )
         )
-        return channel_ids
 
     async def _get_atk_listener_routes(
         self,
@@ -112,35 +112,38 @@ class AtkWarningRouter:
         except:
             return
 
+        target_info = self._get_route_target_info(
+            config_routes=routes,
+            routing_info=routing_info,
+        )
         return {
-            "channel_ids": self._get_route_target_channel_ids(
-                config_routes=routes,
-                routing_info=routing_info,
-            ),
+            "channel_ids": target_info["channel_ids"],
             "guild_id": guild_id,
+            "mention_role_ids": target_info["mention_role_ids"],
         }
 
-    def _get_route_target_channel_ids(
+    def _get_route_target_info(
         self,
         config_routes: dict[
-            str, GuildAttackListenerRoutingConfigType,
+            str,
+            GuildAttackListenerRoutingConfigType,
         ],
         routing_info: RoutingInfo,
-    ) -> set[int]:
+    ) -> RouteTargetInfo:
         """
-        Find all channels that is configured (by users) to receive
-        attack warnings.
+        Find all channels that are configured (by users) to receive
+        attack warnings and roles that need to be mentioned.
 
-        :param config_routes: the routing configuration set by users
-        :type config_routes: 
+        :param config_routes: The configuration set by users
+        :type config_routes:
             dict[str, GuildAttackListenerRoutingConfigType]
         :param routing_info: The information used for routing
         :type routing_info: RoutingInfo
-        :return: The ids of all channels that are configured to
-            receive the attack warning
-        :rtype: set[int]
+        :return: The ids of all channels and roles that are needed
+        :rtype: RouteTargetInfo
         """
         channels: set[int] = set()
+        mention_roles: set[int] = set()
         for routing_config in config_routes.values():
             try:
                 # Skip if config is malformed
@@ -155,23 +158,29 @@ class AtkWarningRouter:
                 and server == routing_info["server"]
             ):  # Match
                 channels.update(channel_ids.values())
+                mention_role_ids = routing_config.get("mention_role_ids", {})
+                mention_roles.update(mention_role_ids.values())
 
-        return channels
+        return {
+            "channel_ids": channels,
+            "mention_role_ids": mention_roles,
+        }
 
     async def _get_valid_channels(
         self,
         route_channels: RouteChannels,
-    ) -> set[int]:
+    ) -> ValidRouteChannels:
         """
-        Get all channels that are in the guild with the specified id.
+        Validate channel ids to ensure they originate from the given
+        guild.
 
-        :param route_channels: The ids of all channels that are 
-            configured to receive the attack warning, and the id 
-            of the guild that is responsible for the configuration
+        :param route_channels: Information about the channels that are
+            configured to receive the attack warning
         :type route_channels: RouteChannels
-        :return: The ids of all given channels that are also in
-            the guild with the specified id
-        :rtype: set[int]
+        :return: The validated version of RouteChannels where channels
+            are guaranteed to originate from the given guild. Channels
+            that violate this prerequisite are ignored.
+        :rtype: ValidRouteChannels
         """
         guild_id = route_channels["guild_id"]
         channel_ids = route_channels["channel_ids"]
@@ -183,13 +192,17 @@ class AtkWarningRouter:
                 for channel_id in channel_ids
             ],
         )
-        # Find all channels that is in the guild with
-        # the given guild id
-        valid_channel_ids: set[int] = set([
-            channel_id
-            for channel_id, channel_guild_id in zip(
-                channel_ids, channel_guild_ids,
-            )
-            if channel_guild_id == guild_id
-        ])
-        return valid_channel_ids
+
+        return {
+            # Find all channels that are in the guild
+            "channel_ids": {
+                channel_id
+                for channel_id, channel_guild_id in zip(
+                    channel_ids, channel_guild_ids
+                )
+                if channel_guild_id == guild_id
+            },
+            "mention_role_ids": set(
+                route_channels.get("mention_role_ids", [])
+            ),
+        }
